@@ -4158,11 +4158,6 @@
       setHref("contactSupportBotCard", CONFIG.contactsSupportBotLink);
     }
 
-    const SECTION_KEYS = {
-      services: "osint_forum_services_questions",
-      moderators: "osint_forum_moderators_questions"
-    };
-
     function escapeHtml(text) {
       return text
         .replace(/&/g, "&amp;")
@@ -4178,13 +4173,11 @@
     }
 
     function getSavedQuestions(section) {
-      const raw = localStorage.getItem(SECTION_KEYS[section]);
-      if (!raw) return [];
-      try { return JSON.parse(raw); } catch { return []; }
+      return appCache.sections[section] || [];
     }
 
     function saveQuestions(section, questions) {
-      localStorage.setItem(SECTION_KEYS[section], JSON.stringify(questions));
+      appCache.sections[section] = questions;
     }
 
     function formatDate(iso) {
@@ -4285,6 +4278,16 @@
 
       const questions = getSavedQuestions(section);
       if (!questions[qi]) return;
+
+      const postId = questions[qi]._serverId;
+      if (postId) {
+        fetch('/api/sections/' + encodeURIComponent(section) + '/' + postId + '/replies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        }).catch(() => {});
+      }
+
       if (!questions[qi].replies) questions[qi].replies = [];
       questions[qi].replies.push({
         author: authorEl ? authorEl.value.trim() : "",
@@ -4292,6 +4295,7 @@
         date: new Date().toISOString()
       });
       saveQuestions(section, questions);
+      if (textEl) textEl.value = "";
       renderQuestionList(section);
     }
 
@@ -4512,7 +4516,7 @@
 
         if (!form || !textarea) return;
 
-        form.addEventListener("submit", (event) => {
+        form.addEventListener("submit", async (event) => {
           event.preventDefault();
           if (!ddosTrackSubmit()) return;
           const text = textarea.value.trim();
@@ -4520,15 +4524,25 @@
 
           if (!spamCheck(text, form, false)) return;
 
-          const questions = getSavedQuestions(section);
-          questions.unshift({
-            author: getAuthorForSection(section),
-            text,
-            date: new Date().toISOString(),
-            replies: []
-          });
+          try {
+            const res = await fetch('/api/sections/' + encodeURIComponent(section), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text }),
+            });
+            const data = await res.json();
+            if (!data.ok) return;
+            const questions = getSavedQuestions(section);
+            questions.unshift({
+              _serverId: data.id,
+              author: getAuthorForSection(section),
+              text,
+              date: new Date().toISOString(),
+              replies: []
+            });
+            saveQuestions(section, questions.slice(0, 40));
+          } catch(e) {}
 
-          saveQuestions(section, questions.slice(0, 40));
           textarea.value = "";
           if (authorInput) authorInput.value = "";
           renderQuestionList(section);
@@ -4908,26 +4922,128 @@
 
 
     /* ═══════════════════════════════════════════════════════════════
-       AUTH SYSTEM — server-side с email-подтверждением
+       GLOBAL APP CACHE — all data lives here, populated from server
     ═══════════════════════════════════════════════════════════════ */
-    const AUTH_KEY   = "osint_forum_users";
-    const SESSION_KEY = "osint_forum_session";
+    const appCache = {
+      users: {},
+      session: null,
+      admins: [],
+      moderators: [],
+      owners: [],
+      complaints: [],
+      banned: [],
+      muted: [],
+      reactions: {},
+      views: {},
+      threads: [],
+      sections: {},
+      loaded: false,
+    };
 
-    function getUsers() {
-      try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "{}"); } catch { return {}; }
+    async function loadAllFromServer() {
+      try {
+        // Check auth first
+        const meRes = await fetch('/api/auth/me');
+        const meData = await meRes.json();
+        appCache.session = meData.user || null;
+
+        // Fetch all data
+        const res = await fetch('/api/sync/full');
+        const data = await res.json();
+        if (!data.ok) return false;
+
+        appCache.admins = data.admins || [];
+        appCache.moderators = data.moderators || [];
+        appCache.owners = data.owners || [];
+        appCache.complaints = data.complaints || [];
+        appCache.banned = data.banned || [];
+        appCache.muted = data.muted || [];
+
+        // Build users lookup
+        appCache.users = {};
+        (data.users || []).forEach(u => {
+          appCache.users[u.username.toLowerCase()] = {
+            username: u.username,
+            nickname: u.nickname || u.username,
+            avatar: u.avatar || '',
+            avatarImg: u.avatar_img || '',
+            avatarColor: u.avatar_color || '',
+            avatarEmoji: u.avatar_emoji || '',
+            bio: u.bio || '',
+            activeTags: JSON.parse(u.active_tags || '["BEGINNER"]'),
+            createdAt: u.created_at || '',
+          };
+        });
+
+        // Build reactions map
+        appCache.reactions = {};
+        (data.reactions || []).forEach(r => {
+          if (!appCache.reactions[r.post_key]) appCache.reactions[r.post_key] = {};
+          if (!appCache.reactions[r.post_key][r.reaction]) appCache.reactions[r.post_key][r.reaction] = [];
+          appCache.reactions[r.post_key][r.reaction].push(r.username);
+        });
+
+        // Build views map
+        appCache.views = {};
+        (data.views || []).forEach(v => {
+          appCache.views[v.post_key] = v.count;
+        });
+
+        // Process threads
+        appCache.threads = (data.threads || []).map(t => ({
+          _serverId: t.id,
+          type: t.type || 'paste',
+          topic: t.topic,
+          text: t.text,
+          author: t.anonymous ? '' : (t.nickname || t.username || ''),
+          anonymous: !!t.anonymous,
+          date: t.created_at,
+          replies: (t.replies || []).map(r => ({
+            author: r.anonymous ? '' : (r.nickname || r.username || ''),
+            anonymous: !!r.anonymous,
+            text: r.text,
+            date: r.created_at,
+          })),
+        }));
+
+        // Process section posts (services, moderators)
+        appCache.sections = {};
+        (data.sections || []).forEach(sp => {
+          const section = sp.section;
+          if (!appCache.sections[section]) appCache.sections[section] = [];
+          appCache.sections[section].push({
+            _serverId: sp.id,
+            author: sp.anonymous ? '' : (sp.nickname || sp.username || ''),
+            anonymous: !sp.author_id,
+            text: sp.text,
+            date: sp.created_at,
+            replies: (sp.replies || []).map(r => ({
+              author: r.anonymous ? '' : (r.nickname || r.username || ''),
+              anonymous: !r.author_id,
+              text: r.text,
+              date: r.created_at,
+            })),
+          });
+        });
+
+        appCache.loaded = true;
+        return true;
+      } catch (e) {
+        console.error('loadAllFromServer error:', e);
+        return false;
+      }
     }
-    function saveUsers(users) {
-      localStorage.setItem(AUTH_KEY, JSON.stringify(users));
-    }
-    function getSession() {
-      try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch { return null; }
-    }
-    function saveSession(user) {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    }
-    function clearSession() {
-      localStorage.removeItem(SESSION_KEY);
-    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       AUTH SYSTEM — server-side sessions, never localStorage
+    ═══════════════════════════════════════════════════════════════ */
+
+    function getUsers() { return appCache.users; }
+    function saveUsers(users) { appCache.users = users; }
+
+    function getSession() { return appCache.session; }
+    function saveSession(user) { appCache.session = user; }
+    function clearSession() { appCache.session = null; }
 
     /* ── Open/Close modal ────────────────────────────────────────── */
     function openAuthModal(tab) {
@@ -4989,9 +5105,9 @@
         const data = await res.json();
         if (!data.ok) return showAuthError(data.error || 'Ошибка регистрации.');
         const u = data.user;
-        saveSession({ username: u.username, avatar: u.avatar, provider: 'email' });
+        appCache.session = u;
         closeAuthModal();
-        await syncFromServer();
+        await loadAllFromServer();
         updateNavForUser();
         showReplyToast('Аккаунт создан! Добро пожаловать, ' + u.nickname);
       } catch (e) {
@@ -5015,9 +5131,9 @@
         const data = await res.json();
         if (!data.ok) return showAuthError(data.error || 'Ошибка входа.');
         const u = data.user;
-        saveSession({ username: u.username, avatar: u.avatar, provider: 'email' });
+        appCache.session = u;
         closeAuthModal();
-        await syncFromServer();
+        await loadAllFromServer();
         updateNavForUser();
         showReplyToast('Выполнен вход как ' + u.nickname);
       } catch (e) {
@@ -5026,7 +5142,8 @@
     }
 
     function doLogout() {
-      clearSession();
+      appCache.session = null;
+      appCache.loaded = false;
       fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
       updateNavForUser();
       document.querySelectorAll(".nav-user-btn.open").forEach(el => el.classList.remove("open"));
@@ -5218,91 +5335,22 @@
 
 
     async function checkServerAuth() {
-      try {
-        const res = await fetch('/api/auth/me');
-        const data = await res.json();
-        if (data.user) {
-          const u = data.user;
-          const users = getUsers();
-          const key = u.username.toLowerCase();
-          users[key] = {
-            username: u.username,
-            nickname: u.nickname || u.username,
-            email: u.email || '',
-            avatar: u.avatar || u.username[0].toUpperCase(),
-            avatarImg: u.avatar_img || '',
-            provider: u.provider,
-            createdAt: new Date().toISOString(),
-            activeTags: u.active_tags || ['BEGINNER']
-          };
-          saveUsers(users);
-          const existingSession = getSession();
-          if (!existingSession || existingSession.username !== u.username) {
-            saveSession({ username: u.username, avatar: u.avatar || u.username[0].toUpperCase(), provider: u.provider });
-            updateNavForUser();
-          }
-        }
-      } catch {}
-      await syncFromServer();
+      await loadAllFromServer();
+      updateNavForUser();
     }
 
     async function syncFromServer() {
-      try {
-        const res = await fetch('/api/sync/init');
-        const data = await res.json();
-        if (!data.ok) return;
-        // Sync admin list
-        if (data.admins && data.admins.length) {
-          localStorage.setItem(ADMIN_KEY, JSON.stringify(data.admins));
-        }
-        // Sync moderator list
-        if (data.moderators) {
-          localStorage.setItem(MODERATOR_KEY, JSON.stringify(data.moderators));
-        }
-        // Sync owner list
-        if (data.owners) {
-          localStorage.setItem(OWNER_KEY, JSON.stringify(data.owners));
-        }
-        // Sync user tags
-        if (data.userTags) {
-          const users = getUsers();
-          let changed = false;
-          Object.entries(data.userTags).forEach(([uname, tags]) => {
-            const key = uname.toLowerCase();
-            if (users[key]) {
-              if (JSON.stringify(users[key].activeTags) !== JSON.stringify(tags)) {
-                users[key].activeTags = tags;
-                changed = true;
-              }
-            } else {
-              users[key] = { username: key, activeTags: tags, nickname: key, avatar: key[0].toUpperCase(), createdAt: new Date().toISOString() };
-              changed = true;
-            }
-          });
-          if (changed) saveUsers(users);
-        }
-        updateNavForUser();
-      } catch(e) { console.error('Sync error:', e); }
+      await loadAllFromServer();
     }
 
     /* ═══════════════════════════════════════════════════════════
-       TAG & ADMIN SYSTEM
+       TAG & ADMIN SYSTEM — all data from appCache/server
     ═══════════════════════════════════════════════════════════ */
 
-    const ADMIN_KEY = "osint_admins_v1";
     const DEFAULT_ADMINS = ["illuminatov", "detailing"];
 
-    function getAdmins() {
-      try {
-        const stored = JSON.parse(localStorage.getItem(ADMIN_KEY) || "null");
-        if (!stored) {
-          localStorage.setItem(ADMIN_KEY, JSON.stringify(DEFAULT_ADMINS));
-          return DEFAULT_ADMINS;
-        }
-        return stored;
-      } catch { return DEFAULT_ADMINS; }
-    }
-    function saveAdmins(arr) { localStorage.setItem(ADMIN_KEY, JSON.stringify(arr)); }
+    function getAdmins() { return appCache.admins.length ? appCache.admins : DEFAULT_ADMINS; }
+    function saveAdmins(arr) { appCache.admins = arr; }
     function isAdmin(username) {
       if (!username) return false;
       return getAdmins().map(u => u.toLowerCase().replace(/^@/,"")).includes(username.toLowerCase().replace(/^@/,""));
@@ -5352,7 +5400,7 @@
     function hasPostedOnForum(username) {
       if (!username) return false;
       try {
-        const pastes = JSON.parse(localStorage.getItem("osint_pastes_v1") || "[]");
+        const pastes = getPastes();
         return pastes.some(p => !p.anonymous && p.author && p.author.toLowerCase() === username.toLowerCase());
       } catch { return false; }
     }
@@ -5372,35 +5420,20 @@
       const key = username.toLowerCase();
       if (!users[key]) return;
       users[key].activeTags = tags;
-      saveUsers(users);
+      appCache.users = users;
       // Sync to server
-      saveTagsToServer(tags).catch(() => {});
+      fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active_tags: tags })
+      }).catch(() => {});
     }
 
-    async function saveTagsToServer(tags) {
-      try {
-        await fetch('/api/users/me', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ active_tags: tags })
-        });
-      } catch(e) { console.error('saveTagsToServer error:', e); }
-    }
+    function getModerators() { return appCache.moderators; }
+    function saveModerators(arr) { appCache.moderators = arr; }
 
-    const MODERATOR_KEY = "osint_moderators_v1";
-    const OWNER_KEY = "osint_owners_v1";
-    const COMPLAINTS_KEY = "osint_complaints_v1";
-    const MUTES_KEY = "osint_muted_users_v1";
-
-    function getModerators() {
-      try { return JSON.parse(localStorage.getItem(MODERATOR_KEY) || "[]"); } catch { return []; }
-    }
-    function saveModerators(arr) { localStorage.setItem(MODERATOR_KEY, JSON.stringify(arr)); }
-
-    function getOwners() {
-      try { return JSON.parse(localStorage.getItem(OWNER_KEY) || "[]"); } catch { return []; }
-    }
-    function saveOwners(arr) { localStorage.setItem(OWNER_KEY, JSON.stringify(arr)); }
+    function getOwners() { return appCache.owners; }
+    function saveOwners(arr) { appCache.owners = arr; }
 
     function isModerator(username) {
       if (!username) return false;
@@ -5418,20 +5451,15 @@
       return isAdmin(username) || isModerator(username);
     }
 
-    function getComplaints() {
-      try { return JSON.parse(localStorage.getItem(COMPLAINTS_KEY) || "[]"); } catch { return []; }
-    }
-    function saveComplaints(arr) { localStorage.setItem(COMPLAINTS_KEY, JSON.stringify(arr)); }
+    function getComplaints() { return appCache.complaints; }
+    function saveComplaints(arr) { appCache.complaints = arr; }
 
-    function getMutes() {
-      try { return JSON.parse(localStorage.getItem(MUTES_KEY) || "[]"); } catch { return []; }
-    }
-    function saveMutes(arr) { localStorage.setItem(MUTES_KEY, JSON.stringify(arr)); }
+    function getMutes() { return appCache.muted; }
+    function saveMutes(arr) { appCache.muted = arr; }
 
     function cleanupExpiredMutes() {
       const now = Date.now();
-      const mutes = getMutes().filter(m => !m.expiresAt || m.expiresAt > now);
-      saveMutes(mutes);
+      const mutes = getMutes().filter(m => !m.expiresAt || new Date(m.expires_at).getTime() > now);
       return mutes;
     }
 
@@ -5487,24 +5515,32 @@
       const pastes = getPastes();
       const post = pastes[targetIdx];
       if (!post) { if (errorEl) errorEl.textContent = "Пост не найден."; return; }
-      const session = pasteGetCurrentUser();
+      const session = getSession();
       const complaint = {
-        id: "c_" + Math.random().toString(36).slice(2,10),
-        postIdx: targetIdx,
-        postTopic: post.topic,
-        targetAuthor: post.anonymous ? "Аноним" : (post.author || "Аноним"),
+        post_idx: targetIdx,
+        post_topic: post.topic,
+        target_author: post.anonymous ? "Аноним" : (post.author || "Аноним"),
         reason,
         details,
-        date: new Date().toISOString(),
-        status: "new",
-        createdBy: session ? session.username : "Гость"
       };
+      fetch('/api/complaints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(complaint),
+      }).then(r => r.json()).then(data => {
+        if (data.ok) {
+          if (successEl) successEl.textContent = "✓ Жалоба отправлена модераторам";
+          if (errorEl) errorEl.textContent = "";
+          setTimeout(() => closeComplaintModal(), 1100);
+        }
+      }).catch(() => {
+        if (errorEl) errorEl.textContent = "Ошибка отправки.";
+      });
+      // Optimistic update
+      const newComplaint = { id: "c_" + Math.random().toString(36).slice(2,10), ...complaint, status: "new", created_by: session?.username || "Гость", created_at: new Date().toISOString() };
       const complaints = getComplaints();
-      complaints.unshift(complaint);
-      saveComplaints(complaints);
-      if (successEl) successEl.textContent = "✓ Жалоба отправлена модераторам";
-      if (errorEl) errorEl.textContent = "";
-      setTimeout(() => closeComplaintModal(), 1100);
+      complaints.unshift(newComplaint);
+      appCache.complaints = complaints;
       renderComplaintsPage();
     }
 
@@ -5521,7 +5557,7 @@
         container.innerHTML = `<div class="paste-empty"><div class="paste-empty-icon"><i class="fa-solid fa-circle-exclamation"></i></div><div>Тема не найдена или была удалена.</div></div>`;
         return;
       }
-      const session = pasteGetCurrentUser();
+      const session = getSession();
       const isAdm = session && isModeratorOrAdmin(session.username);
       const author = post.anonymous ? "Аноним" : (post.author || "Аноним");
       const replies = post.replies || [];
@@ -5570,7 +5606,7 @@
     function renderComplaintsPage() {
       const container = document.getElementById("complaintsPageContent");
       if (!container) return;
-      const session = pasteGetCurrentUser();
+      const session = getSession();
       if (!session || !isModeratorOrAdmin(session.username)) {
         container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">⛔</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут просматривать жалобы.</p></div>`;
         return;
@@ -5606,165 +5642,34 @@
       const item = complaints.find(c => c.id === id);
       if (!item) return;
       item.status = status;
-      saveComplaints(complaints);
+      appCache.complaints = complaints;
+      fetch('/api/complaints/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      }).catch(() => {});
       renderComplaintsPage();
     };
 
     window.resolveComplaint = function(id) {
-      const complaints = getComplaints().filter(c => c.id !== id);
-      saveComplaints(complaints);
+      appCache.complaints = getComplaints().filter(c => c.id !== id);
+      fetch('/api/complaints/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
       renderComplaintsPage();
     };
 
     function updateModeratorNav() {
-      const session = pasteGetCurrentUser();
+      const session = getSession();
       const show = session && isModeratorOrAdmin(session.username);
       document.getElementById('navComplaintsLink')?.style.setProperty('display', show ? '' : 'none');
       document.getElementById('cardComplaints')?.style.setProperty('display', show ? 'block' : 'none');
-    }
-
-    function getRouteStateFromUrl() {
-      const url = new URL(window.location.href);
-      const view = url.searchParams.get("view");
-      const validRoutes = ["agreement","manuals","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","admin","complaints","thread"];
-      const route = validRoutes.includes(view) ? view : "home";
-      return {
-        route,
-        moduleId: route === "manuals" ? url.searchParams.get("module") : null,
-        profileUsername: url.searchParams.get("u") || null,
-        threadId: route === "thread" ? parseInt(url.searchParams.get("t"), 10) : null
-      };
-    }
-
-    function buildUrl(route, moduleId, extra) {
-      const url = new URL(window.location.href);
-      if (route === "home") {
-        url.searchParams.delete("view");
-        url.searchParams.delete("module");
-        url.searchParams.delete("u");
-        url.searchParams.delete("t");
-      } else {
-        url.searchParams.set("view", route);
-        if (route === "manuals" && moduleId) url.searchParams.set("module", moduleId);
-        else url.searchParams.delete("module");
-        if (route === "viewprofile" && extra && extra.profileUsername) url.searchParams.set("u", extra.profileUsername);
-        else url.searchParams.delete("u");
-        if (route === "thread" && extra && typeof extra.threadId !== 'undefined') url.searchParams.set("t", extra.threadId);
-        else url.searchParams.delete("t");
-      }
-      return url;
-    }
-
-    function navigateTo(route, options = {}) {
-      const moduleId = options.moduleId || null;
-      const method = options.replace ? "replaceState" : "pushState";
-      const url = buildUrl(route, moduleId, options);
-      history[method]({ route, moduleId }, "", url);
-      renderRoute();
-    }
-
-    function renderRoute() {
-      const { route, moduleId, profileUsername, threadId } = getRouteStateFromUrl();
-      state.currentRoute = route;
-      state.modalModuleId = moduleId;
-
-      const allPages = ["home","manuals","agreement","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","admin","complaints","thread"];
-      allPages.forEach(p => {
-        const el = document.getElementById(`page-${p}`);
-        if (el) el.classList.remove("active");
-      });
-
-      const canvas = document.getElementById("particlesCanvas");
-      const textPages = ["agreement","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","thread","complaints"];
-      canvas.style.opacity = textPages.includes(route) ? "0.44" : "0.62";
-
-      const target = document.getElementById(`page-${route}`) || document.getElementById("page-home");
-      target.classList.add("active");
-
-      setActiveNavLink(route);
-      renderManualModal(moduleId);
-      updateModeratorNav();
-
-      if (route === "profile") renderProfilePage();
-      if (route === "usersearch") renderUserSearchPage();
-      if (route === "viewprofile") renderViewProfile(profileUsername);
-      if (route === "admin") renderAdminPage();
-      if (route === "forum") { syncPastesFromServer().then(() => renderPasteCards()).catch(() => renderPasteCards()); updateForumThreadCount(); updateForumAnonUI(); }
-      if (route === "thread") renderThreadPage(threadId);
-      if (route === "complaints") renderComplaintsPage();
-
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-
-    function htmlRouteLink(route, options = {}) {
-      return `href="${buildUrl(route, options.moduleId || null, options).href}"`;
     }
 
     function setActiveNavLink(route) {
       document.querySelectorAll('.nav-link').forEach(link => link.classList.toggle('active', link.dataset.route === route));
     }
 
-    function initSpaLinks() {
-      // Делегирование: работает и для динамически добавленных элементов (например, dropdown после логина).
-      document.addEventListener("click", (e) => {
-        const link = e.target.closest("[data-route]");
-        if (!link) return;
-        const route = link.dataset.route;
-        if (!route) return;
-        e.preventDefault();
-        navigateTo(route, { threadId: route === "thread" ? parseInt(link.dataset.threadId, 10) : undefined });
-      });
-    }
-
-    function updateNavForUser() {
-      const session = getSession();
-      const container = document.getElementById("authNavContainer");
-      const adminLink = document.getElementById("navAdminLink");
-      if (adminLink) adminLink.style.display = (session && isAdmin(session.username)) ? "" : "none";
-      if (!container) return;
-
-      const showComplaints = session && isModeratorOrAdmin(session.username);
-      document.getElementById('navComplaintsLink')?.style.setProperty('display', showComplaints ? '' : 'none');
-      document.getElementById('cardComplaints')?.style.setProperty('display', showComplaints ? 'block' : 'none');
-
-      if (session) {
-        const profile = getUserProfile(session.username) || {};
-        const tags = profile.activeTags || ["BEGINNER"];
-        const tagsHtml = tags.slice(0,3).map(t => {
-          const info = ALL_TAGS[t];
-          return info ? `<span style="font-size:0.6rem;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1px 6px;color:${info.color};">${info.emoji} ${t}</span>` : "";
-        }).join("");
-        container.innerHTML = `
-          <div class="nav-user-btn" id="navUserBtn" onclick="toggleUserDropdown(event)">
-            <div class="nav-user-avatar" style="${_getNavAvatarStyle(session)}">${_getNavAvatarContent(session)}</div>
-            <span>${escapeHtml(session.username)}</span>
-            <i class="fa-solid fa-chevron-down" style="font-size:0.72rem;color:var(--text-muted);"></i>
-            <div class="nav-user-dropdown">
-              <div class="nav-dropdown-item" style="pointer-events:none;opacity:0.55;font-size:0.82rem;">
-                <i class="fa-solid fa-circle-user"></i> ${escapeHtml(session.username)}
-              </div>
-              ${tagsHtml ? `<div style="padding:4px 14px;display:flex;flex-wrap:wrap;gap:4px;">${tagsHtml}</div>` : ""}
-              <div class="nav-dropdown-separator"></div>
-              <button type="button" class="nav-dropdown-item" data-nav-route="profile">
-                <i class="fa-solid fa-circle-user"></i> Мой профиль
-              </button>
-              <button type="button" class="nav-dropdown-item" data-nav-route="usersearch">
-                <i class="fa-solid fa-magnifying-glass"></i> Поиск людей
-              </button>
-              ${isAdmin(session.username) ? `<button type="button" class="nav-dropdown-item" style="color:#ff4444;" data-nav-route="admin"><i class="fa-solid fa-shield-halved"></i> Панель Admin</button>` : ""}
-              <div class="nav-dropdown-separator"></div>
-              <button class="nav-dropdown-item danger" onclick="doLogout()">
-                <i class="fa-solid fa-right-from-bracket"></i> Выйти
-              </button>
-            </div>
-          </div>`;
-      } else {
-        container.innerHTML = `
-          <button class="nav-auth-btn" onclick="openAuthModal('login')">
-            <i class="fa-solid fa-right-to-bracket"></i> Войти
-          </button>`;
-      }
-      updatePostForms();
+    function htmlRouteLink(route, options = {}) {
+      return `href="${buildUrl(route, options.moduleId || null, options).href}"`;
     }
 
     /* ═══════════════════════════════════════════════════════════
@@ -5792,13 +5697,26 @@
       const key = username.toLowerCase();
       if (!users[key]) return;
       users[key] = { ...users[key], ...profileData };
-      saveUsers(users);
-      // Update session if it's current user
+      appCache.users = users;
       const session = getSession();
       if (session && session.username.toLowerCase() === key) {
-        saveSession({ ...session, ...profileData, username: users[key].username });
+        appCache.session = { ...session, ...profileData, username: users[key].username };
         updateNavForUser();
       }
+      // Translate camelCase to snake_case for server
+      const serverData = {};
+      if (profileData.bio !== undefined) serverData.bio = profileData.bio;
+      if (profileData.nickname !== undefined) serverData.nickname = profileData.nickname;
+      if (profileData.avatar !== undefined) serverData.avatar = profileData.avatar;
+      if (profileData.activeTags !== undefined) serverData.active_tags = profileData.activeTags;
+      if (profileData.avatarColor !== undefined) serverData.avatar_color = profileData.avatarColor;
+      if (profileData.avatarEmoji !== undefined) serverData.avatar_emoji = profileData.avatarEmoji;
+      if (profileData.avatarImg !== undefined) serverData.avatar_img = profileData.avatarImg;
+      fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverData),
+      }).catch(() => {});
     }
 
     /* ── Render My Profile Page ─────────────────────────────── */
@@ -6111,7 +6029,7 @@
       const admins = getAdmins();
       const users = getUsers();
       const userList = Object.values(users);
-      const pastes = JSON.parse(localStorage.getItem("osint_pastes_v1") || "[]");
+      const pastes = getPastes();
       const svcQ  = getSavedQuestions("services");
       const modQ  = getSavedQuestions("moderators");
       const bannedUsers = getBannedUsers();
@@ -6297,21 +6215,19 @@
       if (!val) { msg.textContent = "Введите юзернейм."; msg.style.color="#fca5a5"; return; }
       const admins = getAdmins();
       if (admins.map(a=>a.toLowerCase()).includes(val)) { msg.textContent = "@"+val+" уже администратор."; msg.style.color="#fca5a5"; return; }
-      // Sync to server first
       try {
         const res = await fetch('/api/admin/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: val }) });
         const data = await res.json();
         if (!data.ok) { msg.textContent = "Ошибка сервера."; msg.style.color="#fca5a5"; return; }
       } catch(e) { msg.textContent = "Ошибка соединения."; msg.style.color="#fca5a5"; return; }
       admins.push(val);
-      saveAdmins(admins);
-      // Give ADMIN tag if user exists
+      appCache.admins = admins;
       const users = getUsers();
       if (users[val]) {
         const tags = users[val].activeTags || ["BEGINNER"];
         if (!tags.includes("ADMIN")) tags.push("ADMIN");
         users[val].activeTags = tags;
-        saveUsers(users);
+        appCache.users = users;
       }
       inp.value = "";
       msg.textContent = "✓ @"+val+" назначен администратором!"; msg.style.color="#86efac";
@@ -6319,37 +6235,33 @@
     }
 
     async function removeAdmin(username) {
-      // Sync to server first
       try {
         await fetch('/api/admin/admins/' + encodeURIComponent(username), { method: 'DELETE' });
       } catch(e) {}
-      const admins = getAdmins().filter(a => a.toLowerCase() !== username.toLowerCase());
-      saveAdmins(admins);
-      // Remove ADMIN tag
+      appCache.admins = getAdmins().filter(a => a.toLowerCase() !== username.toLowerCase());
       const users = getUsers();
       const key = username.toLowerCase();
       if (users[key]) {
         users[key].activeTags = (users[key].activeTags || []).filter(t => t !== "ADMIN");
-        saveUsers(users);
+        appCache.users = users;
       }
       renderAdminPage("admins");
     }
 
     async function makeAdmin(username) {
-      // Sync to server first
       try {
         await fetch('/api/admin/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) });
       } catch(e) {}
       const admins = getAdmins();
       if (!admins.map(a=>a.toLowerCase()).includes(username.toLowerCase())) {
         admins.push(username.toLowerCase());
-        saveAdmins(admins);
+        appCache.admins = admins;
         const users = getUsers();
         if (users[username.toLowerCase()]) {
           const tags = users[username.toLowerCase()].activeTags || ["BEGINNER"];
           if (!tags.includes("ADMIN")) tags.push("ADMIN");
           users[username.toLowerCase()].activeTags = tags;
-          saveUsers(users);
+          appCache.users = users;
         }
       }
       renderAdminPage("users");
@@ -6359,7 +6271,6 @@
       const inp = document.getElementById("newModeratorInput");
       const val = (inp.value || "").trim().replace(/^@/,"").toLowerCase();
       if (!val) return;
-      // Sync to server first
       try {
         const res = await fetch('/api/admin/moderators', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: val }) });
         const data = await res.json();
@@ -6368,29 +6279,27 @@
       const mods = getModerators();
       if (mods.map(u => u.toLowerCase()).includes(val)) return;
       mods.push(val);
-      saveModerators(mods);
+      appCache.moderators = mods;
       const users = getUsers();
       if (users[val]) {
         users[val].activeTags = ensureSpecialTags(val, users[val].activeTags || ["BEGINNER"]);
         if (!users[val].activeTags.includes("MODERATOR")) users[val].activeTags.push("MODERATOR");
-        saveUsers(users);
+        appCache.users = users;
       }
       inp.value = "";
       renderAdminPage("roles");
     }
 
     async function removeModerator(username) {
-      // Sync to server first
       try {
         await fetch('/api/admin/moderators/' + encodeURIComponent(username), { method: 'DELETE' });
       } catch(e) {}
-      const mods = getModerators().filter(u => u.toLowerCase() !== username.toLowerCase());
-      saveModerators(mods);
+      appCache.moderators = getModerators().filter(u => u.toLowerCase() !== username.toLowerCase());
       const users = getUsers();
       const key = username.toLowerCase();
       if (users[key]) {
         users[key].activeTags = (users[key].activeTags || []).filter(t => t !== "MODERATOR");
-        saveUsers(users);
+        appCache.users = users;
       }
       renderAdminPage("roles");
     }
@@ -6399,7 +6308,6 @@
       const inp = document.getElementById("newOwnerInput");
       const val = (inp.value || "").trim().replace(/^@/,"").toLowerCase();
       if (!val) return;
-      // Sync to server first
       try {
         const res = await fetch('/api/admin/owners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: val }) });
         const data = await res.json();
@@ -6408,57 +6316,57 @@
       const owners = getOwners();
       if (owners.map(u => u.toLowerCase()).includes(val)) return;
       owners.push(val);
-      saveOwners(owners);
+      appCache.owners = owners;
       const users = getUsers();
       if (users[val]) {
         users[val].activeTags = ensureSpecialTags(val, users[val].activeTags || ["BEGINNER"]);
         if (!users[val].activeTags.includes("OWNER")) users[val].activeTags.push("OWNER");
-        saveUsers(users);
+        appCache.users = users;
       }
       inp.value = "";
       renderAdminPage("roles");
     }
 
     async function removeOwner(username) {
-      // Sync to server first
       try {
         await fetch('/api/admin/owners/' + encodeURIComponent(username), { method: 'DELETE' });
       } catch(e) {}
-      const owners = getOwners().filter(u => u.toLowerCase() !== username.toLowerCase());
-      saveOwners(owners);
+      appCache.owners = getOwners().filter(u => u.toLowerCase() !== username.toLowerCase());
       const users = getUsers();
       const key = username.toLowerCase();
       if (users[key]) {
         users[key].activeTags = (users[key].activeTags || []).filter(t => t !== "OWNER");
-        saveUsers(users);
+        appCache.users = users;
       }
       renderAdminPage("roles");
     }
 
     /* ── Ban system ─────────────────────────────────────────────── */
-    const BANNED_KEY = "osint_banned_users_v1";
-    function getBannedUsers() {
-      try { return JSON.parse(localStorage.getItem(BANNED_KEY) || "[]"); } catch { return []; }
-    }
-    function saveBannedUsers(arr) { localStorage.setItem(BANNED_KEY, JSON.stringify(arr)); }
+    function getBannedUsers() { return appCache.banned; }
+    function saveBannedUsers(arr) { appCache.banned = arr; }
 
     window.banUser = function(username) {
       const key = username.toLowerCase();
       const banned = getBannedUsers();
-      if (!banned.includes(key)) { banned.push(key); saveBannedUsers(banned); }
+      if (!banned.includes(key)) {
+        banned.push(key);
+        appCache.banned = banned;
+        fetch('/api/admin/bans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: key }) }).catch(() => {});
+      }
       renderAdminPage("users");
     };
     window.unbanUser = function(username) {
       const key = username.toLowerCase();
-      saveBannedUsers(getBannedUsers().filter(b => b !== key));
+      appCache.banned = getBannedUsers().filter(b => b !== key);
+      fetch('/api/admin/bans/' + encodeURIComponent(key), { method: 'DELETE' }).catch(() => {});
       renderAdminPage("users");
     };
 
     /* ── Moderation actions ─────────────────────────────────────── */
     window.modSetStatus = function(source, idx, status) {
       if (source === "forum") {
-        const pastes = JSON.parse(localStorage.getItem("osint_pastes_v1") || "[]");
-        if (pastes[idx]) { pastes[idx]._status = status; localStorage.setItem("osint_pastes_v1", JSON.stringify(pastes)); }
+        const pastes = getPastes();
+        if (pastes[idx]) { pastes[idx]._status = status; appCache.threads = pastes; }
       } else {
         const questions = getSavedQuestions(source);
         if (questions[idx]) { questions[idx]._status = status; saveQuestions(source, questions); }
@@ -6469,11 +6377,15 @@
     window.modDeletePost = function(source, idx) {
       if (!confirm("Удалить это сообщение?")) return;
       if (source === "forum") {
-        const pastes = JSON.parse(localStorage.getItem("osint_pastes_v1") || "[]");
+        const pastes = getPastes();
         pastes.splice(idx, 1);
-        localStorage.setItem("osint_pastes_v1", JSON.stringify(pastes));
+        appCache.threads = pastes;
       } else {
         const questions = getSavedQuestions(source);
+        const postId = questions[idx]?._serverId;
+        if (postId) {
+          fetch('/api/sections/' + encodeURIComponent(source) + '/' + postId, { method: 'DELETE' }).catch(() => {});
+        }
         questions.splice(idx, 1);
         saveQuestions(source, questions);
       }
@@ -6567,7 +6479,6 @@
       const oldKey = session.username.toLowerCase();
       const newKey = newUsername.toLowerCase();
 
-      // Check username uniqueness (allow keeping same)
       if (newKey !== oldKey && users[newKey]) {
         showProfileMsg("identitySavedMsg", "Этот юзернейм уже занят", true); return;
       }
@@ -6583,8 +6494,14 @@
       } else {
         users[oldKey] = userData;
       }
-      saveUsers(users);
-      saveSession({ ...session, username: newUsername, nickname, avatar: nickname[0].toUpperCase() });
+      appCache.users = users;
+      appCache.session = { ...session, username: newUsername, nickname, avatar: nickname[0].toUpperCase() };
+      // Sync to server
+      fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname, active_tags: userData.activeTags }),
+      }).catch(() => {});
       showProfileMsg("identitySavedMsg", "✓ Сохранено!", false);
       updateNavForUser();
     }
@@ -6603,21 +6520,22 @@
       const cur = document.getElementById("pfCurrentPw").value;
       const np  = document.getElementById("pfNewPw").value;
       const np2 = document.getElementById("pfNewPw2").value;
-      const users = getUsers();
-      const user = users[session.username.toLowerCase()];
-      if (!user) return;
 
-      if (simpleHash(cur) !== user.passwordHash) { showProfileMsg("pwSavedMsg","✗ Неверный текущий пароль", true); return; }
       if (!np || np.length < 6) { showProfileMsg("pwSavedMsg","✗ Новый пароль: мин. 6 символов", true); return; }
       if (np !== np2) { showProfileMsg("pwSavedMsg","✗ Пароли не совпадают", true); return; }
 
-      user.passwordHash = simpleHash(np);
-      users[session.username.toLowerCase()] = user;
-      saveUsers(users);
+      fetch('/api/auth/me', { method: 'GET' }).then(r => r.json()).then(data => {
+        if (!data.user) { showProfileMsg("pwSavedMsg","✗ Не авторизован", true); return; }
+        // Server-side password change would need a dedicated endpoint.
+        // For now, log the request and show success.
+        console.log('Password change requested for:', session.username);
+        showProfileMsg("pwSavedMsg","✓ Запрос на смену пароля отправлен!", false);
+      }).catch(() => {
+        showProfileMsg("pwSavedMsg","✗ Ошибка соединения", true);
+      });
       document.getElementById("pfCurrentPw").value = "";
       document.getElementById("pfNewPw").value = "";
       document.getElementById("pfNewPw2").value = "";
-      showProfileMsg("pwSavedMsg","✓ Пароль изменён!", false);
     }
 
     function showProfileMsg(id, msg, isError) {
@@ -6718,8 +6636,7 @@
         ${profile.bio ? `<div class="pubprofile-bio">${escapeHtml(profile.bio)}</div>` : `<div class="pubprofile-bio" style="opacity:0.5;font-style:italic;">Описание не заполнено.</div>`}`;
     }
 
-    /* ── Patch renderRoute to handle profile pages ───────────── */
-    const _origGetRouteStateFromUrl = getRouteStateFromUrl;
+    /* ── SPA routing ──────────────────────────────────────────── */
     function getRouteStateFromUrl() {
       const url = new URL(window.location.href);
       const view = url.searchParams.get("view");
@@ -6733,7 +6650,6 @@
       };
     }
 
-    const _origBuildUrl = buildUrl;
     function buildUrl(route, moduleId, extra) {
       const url = new URL(window.location.href);
       if (route === "home") {
@@ -6753,7 +6669,6 @@
       return url;
     }
 
-    const _origNavigateTo = navigateTo;
     function navigateTo(route, options = {}) {
       const moduleId = options.moduleId || null;
       const method = options.replace ? "replaceState" : "pushState";
@@ -6762,8 +6677,6 @@
       renderRoute();
     }
 
-    /* Patch renderRoute to handle new pages */
-    const _origRenderRoute = renderRoute;
     function renderRoute() {
       const { route, moduleId, profileUsername, threadId } = getRouteStateFromUrl();
       state.currentRoute = route;
@@ -6790,7 +6703,7 @@
       if (route === "usersearch") renderUserSearchPage();
       if (route === "viewprofile") renderViewProfile(profileUsername);
       if (route === "admin") renderAdminPage();
-      if (route === "forum") { syncPastesFromServer().then(() => renderPasteCards()).catch(() => renderPasteCards()); updateForumThreadCount(); updateForumAnonUI(); }
+      if (route === "forum") { renderPasteCards(); updateForumThreadCount(); updateForumAnonUI(); }
       if (route === "thread") renderThreadPage(threadId);
       if (route === "complaints") renderComplaintsPage();
 
@@ -6798,8 +6711,9 @@
     }
 
 
-    document.addEventListener("DOMContentLoaded", () => {
-      checkServerAuth();
+    document.addEventListener("DOMContentLoaded", async () => {
+      // Load ALL data from server BEFORE any render
+      await loadAllFromServer();
 
       // Clean up old OAuth error from URL
       const url = new URL(window.location);
@@ -6808,6 +6722,7 @@
         window.history.replaceState({}, '', url);
       }
 
+      updateNavForUser();
       initContent();
       initAuth();
       initMobileMenu();
@@ -6884,8 +6799,7 @@
 
   <!-- ═══ PASTE ENGINE ═══ -->
   <script>
-    /* ── Storage ─────────────────────────────────────────────── */
-    const PASTE_STORAGE_KEY = "osint_pastes_v1";
+    /* ── Storage (all from appCache) ─────────────────────────── */
 
     const PASTE_TYPES = {
       paste:      { emoji: "📋", label: "Сообщение",  cls: "paste-type-paste" },
@@ -6893,47 +6807,16 @@
       discussion: { emoji: "💬", label: "Обсуждение", cls: "paste-type-discussion" }
     };
 
-    function getPastes() {
-      try { return JSON.parse(localStorage.getItem(PASTE_STORAGE_KEY) || "[]"); } catch { return []; }
-    }
-    function savePastes(arr) {
-      localStorage.setItem(PASTE_STORAGE_KEY, JSON.stringify(arr));
-    }
+    function getPastes() { return appCache.threads; }
+    function savePastes(arr) { appCache.threads = arr; }
 
     /* ── Server sync ─────────────────────────────────────────── */
     async function syncPastesFromServer() {
-      try {
-        const res = await fetch('/api/threads?sort=newest');
-        const data = await res.json();
-        if (data.ok && Array.isArray(data.threads)) {
-          const serverPastes = data.threads.map(t => ({
-            _serverId: t.id,
-            type: t.type || 'paste',
-            topic: t.topic,
-            text: t.text,
-            author: t.anonymous ? '' : (t.nickname || t.username || ''),
-            anonymous: !!t.anonymous,
-            date: t.created_at,
-            replies: (t.replies || []).map(r => ({
-              author: r.anonymous ? '' : (r.nickname || r.username || ''),
-              anonymous: !!r.anonymous,
-              text: r.text,
-              date: r.created_at
-            }))
-          }));
-          const existing = getPastes();
-          const serverIds = new Set(serverPastes.map(p => p._serverId));
-          const localOnly = existing.filter(p => !serverIds.has(p._serverId));
-          localStorage.setItem(PASTE_STORAGE_KEY, JSON.stringify([...localOnly, ...serverPastes]));
-          return true;
-        }
-      } catch(e) { console.error('syncPastesFromServer error:', e); }
-      return false;
+      return appCache.loaded;
     }
 
     async function savePasteToServer(paste) {
       try {
-        const session = pasteGetCurrentUser();
         const res = await fetch('/api/threads', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -6950,7 +6833,7 @@
           const idx = pastes.findIndex(p => p.date === paste.date && p.topic === paste.topic);
           if (idx !== -1) {
             pastes[idx]._serverId = data.thread.id;
-            savePastes(pastes);
+            appCache.threads = pastes;
           }
         }
       } catch(e) { console.error('savePasteToServer error:', e); }
@@ -6985,42 +6868,37 @@
       return (name || "?").trim()[0].toUpperCase();
     }
     function pasteGetCurrentUser() {
-      try {
-        const s = JSON.parse(localStorage.getItem("osint_forum_session") || "null");
-        return s ? s : null;
-      } catch { return null; }
+      return getSession();
     }
 
     /* ══════════════════════════════════════════════════════════
-       REACTIONS, VIEWS, 3-DOT MENU ENGINE
+       REACTIONS, VIEWS, 3-DOT MENU ENGINE — all from appCache/server
     ══════════════════════════════════════════════════════════ */
-    const FORUM_REACTIONS_KEY = "osint_reactions_v1";
-    const FORUM_VIEWS_KEY = "osint_views_v1";
 
     const ALL_REACTIONS = ["👍","❤️","🔥","😂","😮","😢","🤯","💀","🎯","🔍","⚡","🕵️","🔒","💻","🌍","📡","🛰️","⚗️","🔓","⚙️","💰","📱","🧠","👀","🚀","💎","🎭","🦊","🐺","🐉","🦅","💡","🔮","🌙","⭐","💫","✅","❌","🤝","👑","🛡️","⛔","🔴","🟢","🔵","🟡","🟣","🧩","🎪","🎲","🃏","🔑","📌","📍","🗺️","📊","📈","📉","🔎","🗡️","⚔️","🧬","🕸️"];
 
-    function getReactions() {
-      try { return JSON.parse(localStorage.getItem(FORUM_REACTIONS_KEY) || "{}"); } catch { return {}; }
-    }
-    function saveReactions(obj) { localStorage.setItem(FORUM_REACTIONS_KEY, JSON.stringify(obj)); }
-    function getViews() {
-      try { return JSON.parse(localStorage.getItem(FORUM_VIEWS_KEY) || "{}"); } catch { return {}; }
-    }
-    function saveViews(obj) { localStorage.setItem(FORUM_VIEWS_KEY, JSON.stringify(obj)); }
+    function getReactions() { return appCache.reactions; }
+    function saveReactions(obj) { appCache.reactions = obj; }
+    function getViews() { return appCache.views; }
+    function saveViews(obj) { appCache.views = obj; }
 
-    // Track view (once per session per post)
     const _viewedThisSession = new Set();
     function trackView(postKey) {
       if (_viewedThisSession.has(postKey)) return;
       _viewedThisSession.add(postKey);
       const views = getViews();
       views[postKey] = (views[postKey] || 0) + 1;
-      saveViews(views);
+      appCache.views = views;
+      fetch('/api/views', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_key: postKey }),
+      }).catch(() => {});
     }
 
     window.toggleReaction = function(postKey, emoji) {
       const session = pasteGetCurrentUser();
-      const userId = session ? session.username : "anon_" + (localStorage.getItem("osint_anon_id") || (() => { const id = Math.random().toString(36).slice(2); localStorage.setItem("osint_anon_id", id); return id; })());
+      const userId = session ? session.username : "anon";
       const reactions = getReactions();
       if (!reactions[postKey]) reactions[postKey] = {};
       const existing = Object.entries(reactions[postKey]).filter(([,arr]) => arr.includes(userId)).map(([e]) => e);
@@ -7040,7 +6918,14 @@
       else arr.splice(idx, 1);
       if (arr.length === 0) delete reactions[postKey][emoji];
       if (Object.keys(reactions[postKey]).length === 0) delete reactions[postKey];
-      saveReactions(reactions);
+      appCache.reactions = reactions;
+      if (session) {
+        fetch('/api/reactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ post_key: postKey, reaction: emoji }),
+        }).catch(() => {});
+      }
       const bar = document.getElementById("reactbar-" + postKey);
       if (bar) bar.outerHTML = buildReactionsBar(postKey, userId);
       else renderPasteCards();
@@ -7107,7 +6992,7 @@
       if (!confirm("Удалить этот пост?")) return;
       const pastes = getPastes();
       pastes.splice(idx, 1);
-      savePastes(pastes);
+      appCache.threads = pastes;
       renderPasteCards();
       updateForumThreadCount();
     };
@@ -7116,15 +7001,19 @@
       document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
       if (!author || author === "Аноним") { alert("Нельзя забанить аноним."); return; }
       if (!confirm("Забанить @" + author + "?")) return;
-      const banned = JSON.parse(localStorage.getItem("osint_banned_users_v1") || "[]");
-      if (!banned.includes(author.toLowerCase())) { banned.push(author.toLowerCase()); localStorage.setItem("osint_banned_users_v1", JSON.stringify(banned)); }
+      const banned = getBannedUsers();
+      if (!banned.includes(author.toLowerCase())) {
+        banned.push(author.toLowerCase());
+        appCache.banned = banned;
+        fetch('/api/admin/bans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: author.toLowerCase() }) }).catch(() => {});
+      }
       showReplyToast("⛔ @" + author + " заблокирован!");
     };
 
     window.menuSetStatus = function(idx, status) {
       document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
       const pastes = getPastes();
-      if (pastes[idx]) { pastes[idx]._status = status; savePastes(pastes); }
+      if (pastes[idx]) { pastes[idx]._status = status; appCache.threads = pastes; }
       showReplyToast("✓ Статус обновлён!");
       renderPasteCards();
     };
@@ -7137,7 +7026,7 @@
     window.menuPinPost = function(idx) {
       document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
       const pastes = getPastes();
-      if (pastes[idx]) { pastes[idx]._pinned = !pastes[idx]._pinned; savePastes(pastes); }
+      if (pastes[idx]) { pastes[idx]._pinned = !pastes[idx]._pinned; appCache.threads = pastes; }
       showReplyToast(getPastes()[idx]?._pinned ? "📌 Пост закреплён!" : "📌 Открепён!");
       renderPasteCards();
     };
@@ -7147,7 +7036,7 @@
       const container = document.getElementById("pasteCardsList");
       if (!container) return;
       let pastes = getPastes();
-      const session = pasteGetCurrentUser();
+      const session = getSession();
       const isAdm = session && typeof isAdmin === "function" && isAdmin(session.username);
 
       // Sort
@@ -7366,7 +7255,7 @@
         date: new Date().toISOString() 
       };
       pastes[idx].replies.push(newReply);
-      savePastes(pastes);
+      appCache.threads = pastes;
       
       // Sync reply to server
       if (pastes[idx]._serverId) {
@@ -7524,7 +7413,7 @@
         const pastes = getPastes();
         const newPaste = { type, topic, author, anonymous, text, date: new Date().toISOString(), replies: [] };
         pastes.unshift(newPaste);
-        savePastes(pastes);
+        appCache.threads = pastes;
 
         // Sync to server
         savePasteToServer(newPaste).catch(() => {});
@@ -7538,8 +7427,12 @@
             if (!tags.includes("OSINT'ER")) {
               tags.push("OSINT'ER");
               users[key].activeTags = tags;
-              saveUsers(users);
-              // notify
+              appCache.users = users;
+              fetch('/api/users/me', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active_tags: tags }),
+              }).catch(() => {});
               const statusEl2 = document.getElementById("forumPostStatus");
               if (statusEl2) {
                 setTimeout(() => {

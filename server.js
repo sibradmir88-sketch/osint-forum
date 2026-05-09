@@ -108,7 +108,45 @@ db.exec(`
     username   TEXT    PRIMARY KEY,
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS complaints (
+    id           TEXT    PRIMARY KEY,
+    post_idx     INTEGER DEFAULT 0,
+    post_topic   TEXT    DEFAULT '',
+    target_author TEXT   DEFAULT '',
+    reason       TEXT    DEFAULT '',
+    details      TEXT    DEFAULT '',
+    status       TEXT    DEFAULT 'new',
+    created_by   TEXT    DEFAULT '',
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS banned_users (
+    username   TEXT    PRIMARY KEY,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS muted_users (
+    username   TEXT    PRIMARY KEY,
+    expires_at TEXT,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS post_reactions (
+    post_key   TEXT    NOT NULL,
+    username   TEXT    NOT NULL,
+    reaction   TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (post_key, username, reaction)
+  );
+  CREATE TABLE IF NOT EXISTS post_views (
+    post_key   TEXT    NOT NULL,
+    username   TEXT    NOT NULL,
+    count      INTEGER DEFAULT 1,
+    PRIMARY KEY (post_key, username)
+  );
 `);
+
+// Add missing user columns
+try { db.exec("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN avatar_color TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN avatar_emoji TEXT DEFAULT ''"); } catch(e) {}
 
 ['illuminatov', 'detailing'].forEach(u => {
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
@@ -217,6 +255,47 @@ app.get('/api/sync/init', (req, res) => {
   const userTags = {};
   userRows.forEach(u => { userTags[u.username] = JSON.parse(u.active_tags || '["BEGINNER"]'); });
   res.json({ ok: true, admins, moderators, owners, userTags });
+});
+
+// Full sync: returns EVERYTHING the frontend needs — no localStorage required
+app.get('/api/sync/full', (req, res) => {
+  const admins = db.prepare('SELECT username FROM admin_usernames').all().map(r => r.username);
+  const moderators = db.prepare('SELECT username FROM moderators').all().map(r => r.username);
+  const owners = db.prepare('SELECT username FROM owners').all().map(r => r.username);
+  const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 200').all();
+  const banned = db.prepare('SELECT username FROM banned_users').all().map(r => r.username);
+  const muted = db.prepare('SELECT username, expires_at FROM muted_users').all();
+  const users = db.prepare("SELECT username, nickname, avatar, avatar_img, active_tags, bio, avatar_color, avatar_emoji, created_at FROM users").all();
+  const reactions = db.prepare('SELECT post_key, username, reaction FROM post_reactions').all();
+  const views = db.prepare('SELECT post_key, SUM(count) as count FROM post_views GROUP BY post_key').all();
+  const threads = db.prepare(`
+    SELECT t.*, u.username, u.nickname, u.avatar, u.avatar_img,
+           (SELECT COUNT(*) FROM replies r WHERE r.thread_id=t.id) AS reply_count
+    FROM threads t LEFT JOIN users u ON t.author_id = u.id
+    ORDER BY t.created_at DESC LIMIT 200
+  `).all();
+  const threadsWithReplies = threads.map(t => {
+    const replies = db.prepare(`
+      SELECT r.*, u.username, u.nickname, u.avatar, u.avatar_img
+      FROM replies r LEFT JOIN users u ON r.author_id=u.id
+      WHERE r.thread_id=? ORDER BY r.created_at ASC
+    `).all(t.id);
+    return { ...t, replies };
+  });
+  const sectionPosts = db.prepare(`
+    SELECT sp.*, u.username, u.nickname, u.avatar, u.avatar_img
+    FROM section_posts sp LEFT JOIN users u ON sp.author_id=u.id
+    ORDER BY sp.created_at DESC LIMIT 200
+  `).all();
+  const sectionsWithReplies = sectionPosts.map(sp => {
+    const replies = db.prepare(`
+      SELECT sr.*, u.username, u.nickname, u.avatar, u.avatar_img
+      FROM section_replies sr LEFT JOIN users u ON sr.author_id=u.id
+      WHERE sr.post_id=? ORDER BY sr.created_at ASC
+    `).all(sp.id);
+    return { ...sp, replies };
+  });
+  res.json({ ok: true, admins, moderators, owners, complaints, banned, muted, users, reactions, views, threads: threadsWithReplies, sections: sectionsWithReplies });
 });
 
 app.get('/api/threads', (req, res) => {
@@ -329,10 +408,134 @@ app.get('/api/users/:username', (req, res) => {
 
 app.patch('/api/users/me', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  const { nickname, avatar, active_tags } = req.body;
-  db.prepare('UPDATE users SET nickname=?, avatar=?, active_tags=? WHERE id=?')
-    .run(nickname || req.user.nickname, avatar || req.user.avatar,
-         active_tags ? JSON.stringify(active_tags) : (req.user.active_tags || '["BEGINNER"]'), req.user.id);
+  const { nickname, avatar, active_tags, bio, avatar_color, avatar_emoji, avatar_img } = req.body;
+  const existing = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
+  if (!existing) return res.json({ ok: false, error: 'Пользователь не найден.' });
+  db.prepare(`UPDATE users SET nickname=?, avatar=?, active_tags=?, bio=?, avatar_color=?, avatar_emoji=?, avatar_img=? WHERE id=?`)
+    .run(
+      nickname || existing.nickname,
+      avatar || existing.avatar,
+      active_tags ? JSON.stringify(active_tags) : existing.active_tags,
+      bio !== undefined ? bio : (existing.bio || ''),
+      avatar_color !== undefined ? avatar_color : (existing.avatar_color || ''),
+      avatar_emoji !== undefined ? avatar_emoji : (existing.avatar_emoji || ''),
+      avatar_img !== undefined ? avatar_img : (existing.avatar_img || ''),
+      req.user.id
+    );
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Complaints CRUD ──────────────────────────────────────────
+app.post('/api/complaints', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  const { post_idx, post_topic, target_author, reason, details } = req.body;
+  if (!reason) return res.json({ ok: false, error: 'Укажите причину.' });
+  const id = 'c_' + Math.random().toString(36).slice(2, 10);
+  db.prepare(`INSERT INTO complaints (id, post_idx, post_topic, target_author, reason, details, created_by)
+               VALUES (?,?,?,?,?,?,?)`)
+    .run(id, post_idx || 0, post_topic || '', target_author || '', reason, details || '', req.user.username);
+  backupDb();
+  res.json({ ok: true, id });
+});
+
+app.get('/api/complaints', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  if (!isAdmin(req.user.username) && !isModerator(req.user.username))
+    return res.json({ ok: false, error: 'Нет доступа.' });
+  const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 200').all();
+  res.json({ ok: true, complaints });
+});
+
+app.patch('/api/complaints/:id', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  if (!isAdmin(req.user.username) && !isModerator(req.user.username))
+    return res.json({ ok: false, error: 'Нет доступа.' });
+  const { status } = req.body;
+  db.prepare('UPDATE complaints SET status=? WHERE id=?').run(status || 'new', req.params.id);
+  backupDb();
+  res.json({ ok: true });
+});
+
+app.delete('/api/complaints/:id', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  if (!isAdmin(req.user.username) && !isModerator(req.user.username))
+    return res.json({ ok: false, error: 'Нет доступа.' });
+  db.prepare('DELETE FROM complaints WHERE id=?').run(req.params.id);
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Ban / Unban ──────────────────────────────────────────────
+app.post('/api/admin/bans', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const { username } = req.body;
+  if (!username) return res.json({ ok: false, error: 'Укажите username.' });
+  const clean = username.toLowerCase().replace(/^@/, '');
+  db.prepare('INSERT OR IGNORE INTO banned_users (username) VALUES (?)').run(clean);
+  backupDb();
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/bans/:username', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const clean = req.params.username.toLowerCase();
+  db.prepare('DELETE FROM banned_users WHERE username=?').run(clean);
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Mute / Unmute ────────────────────────────────────────────
+app.post('/api/admin/mutes', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const { username, expires_at } = req.body;
+  if (!username) return res.json({ ok: false, error: 'Укажите username.' });
+  const clean = username.toLowerCase().replace(/^@/, '');
+  db.prepare('INSERT OR IGNORE INTO muted_users (username, expires_at) VALUES (?,?)').run(clean, expires_at || null);
+  backupDb();
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/mutes/:username', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const clean = req.params.username.toLowerCase();
+  db.prepare('DELETE FROM muted_users WHERE username=?').run(clean);
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Reactions ────────────────────────────────────────────────
+app.post('/api/reactions', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  const { post_key, reaction } = req.body;
+  if (!post_key || !reaction) return res.json({ ok: false, error: 'Неверные параметры.' });
+  const existing = db.prepare('SELECT * FROM post_reactions WHERE post_key=? AND username=? AND reaction=?')
+    .get(post_key, req.user.username, reaction);
+  if (existing) {
+    db.prepare('DELETE FROM post_reactions WHERE post_key=? AND username=? AND reaction=?')
+      .run(post_key, req.user.username, reaction);
+  } else {
+    db.prepare('INSERT INTO post_reactions (post_key, username, reaction) VALUES (?,?,?)')
+      .run(post_key, req.user.username, reaction);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Views ────────────────────────────────────────────────────
+app.post('/api/views', (req, res) => {
+  const { post_key } = req.body;
+  if (!post_key) return res.json({ ok: false, error: 'Неверные параметры.' });
+  const username = req.user?.username || 'anon';
+  const existing = db.prepare('SELECT * FROM post_views WHERE post_key=? AND username=?')
+    .get(post_key, username);
+  if (existing) {
+    db.prepare('UPDATE post_views SET count=count+1 WHERE post_key=? AND username=?')
+      .run(post_key, username);
+  } else {
+    db.prepare('INSERT INTO post_views (post_key, username, count) VALUES (?,?,1)')
+      .run(post_key, username);
+  }
   backupDb();
   res.json({ ok: true });
 });
