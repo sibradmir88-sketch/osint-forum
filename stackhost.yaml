@@ -1,0 +1,8 @@
+name: osint-forum
+runtime: node
+version: 20
+build: npm install
+start: npm start
+port: 3000
+healthcheck: /
+auto_deploy: true
