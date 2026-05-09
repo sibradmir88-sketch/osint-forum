@@ -8,16 +8,10 @@ const express       = require('express');
 const session       = require('express-session');
 const Database      = require('better-sqlite3');
 const path          = require('path');
+const fs = require('fs');
 const crypto        = require('crypto');
-
-const app  = express();
-const PORT = process.env.PORT || 3000;
-
-const CONFIG = {
-  sessionSecret : process.env.SESSION_SECRET || 'CHANGE_ME_SECRET_32chars_min',
-};
-
-const db = new Database('forum.db');
+const DB_PATH = fs.existsSync('/data') ? '/data/forum.db' : 'forum.db';
+const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -326,7 +320,7 @@ app.get('/api/admin/users', (req, res) => {
 
 app.get('/api/admin/db-export', (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
-  res.download('forum.db');
+  res.download(DB_PATH);
 });
 
 app.post('/api/admin/db-import', (req, res) => {
