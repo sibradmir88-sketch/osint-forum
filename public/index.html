@@ -5333,6 +5333,18 @@
       if (!users[key]) return;
       users[key].activeTags = tags;
       saveUsers(users);
+      // Sync to server
+      saveTagsToServer(tags).catch(() => {});
+    }
+
+    async function saveTagsToServer(tags) {
+      try {
+        await fetch('/api/users/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active_tags: tags })
+        });
+      } catch(e) { console.error('saveTagsToServer error:', e); }
     }
 
     const MODERATOR_KEY = "osint_moderators_v1";
@@ -6714,6 +6726,7 @@
       initModalEvents();
       initParticles();
       initPastePage();
+      syncPastesFromServer().catch(() => {});
 
       window.addEventListener("popstate", renderRoute);
       const initial = getRouteStateFromUrl();
@@ -6794,6 +6807,75 @@
     }
     function savePastes(arr) {
       localStorage.setItem(PASTE_STORAGE_KEY, JSON.stringify(arr));
+    }
+
+    /* ── Server sync ─────────────────────────────────────────── */
+    async function syncPastesFromServer() {
+      try {
+        const res = await fetch('/api/threads?sort=newest');
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.threads)) {
+          const serverPastes = data.threads.map(t => ({
+            _serverId: t.id,
+            type: t.type || 'paste',
+            topic: t.topic,
+            text: t.text,
+            author: t.anonymous ? '' : (t.nickname || t.username || ''),
+            anonymous: !!t.anonymous,
+            date: t.created_at,
+            replies: (t.replies || []).map(r => ({
+              author: r.anonymous ? '' : (r.nickname || r.username || ''),
+              anonymous: !!r.anonymous,
+              text: r.text,
+              date: r.created_at
+            }))
+          }));
+          const existing = getPastes();
+          const localOnly = existing.filter(p => !p._serverId);
+          const seenTopics = new Set(serverPastes.map(p => p.topic + '|' + p.date));
+          const trulyLocal = localOnly.filter(p => !seenTopics.has(p.topic + '|' + p.date));
+          localStorage.setItem(PASTE_STORAGE_KEY, JSON.stringify([...trulyLocal, ...serverPastes]));
+        }
+      } catch(e) { console.error('syncPastesFromServer error:', e); }
+    }
+
+    async function savePasteToServer(paste) {
+      try {
+        const session = pasteGetCurrentUser();
+        const res = await fetch('/api/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: paste.type || 'paste',
+            topic: paste.topic,
+            text: paste.text,
+            anonymous: paste.anonymous
+          })
+        });
+        const data = await res.json();
+        if (data.ok && data.thread && data.thread.id) {
+          const pastes = getPastes();
+          const idx = pastes.findIndex(p => p.date === paste.date && p.topic === paste.topic);
+          if (idx !== -1) {
+            pastes[idx]._serverId = data.thread.id;
+            savePastes(pastes);
+          }
+        }
+      } catch(e) { console.error('savePasteToServer error:', e); }
+    }
+
+    async function saveReplyToServer(threadId, reply) {
+      if (!threadId) return;
+      try {
+        await fetch('/api/threads/' + threadId + '/replies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: reply.text,
+            anonymous: reply.anonymous
+          })
+        });
+      } catch(e) { console.error('saveReplyToServer error:', e); }
     }
 
     /* ── Helpers ─────────────────────────────────────────────── */
@@ -7185,14 +7267,20 @@
       const pastes = getPastes();
       if (!pastes[idx]) return;
       if (!pastes[idx].replies) pastes[idx].replies = [];
-      pastes[idx].replies.push({ 
+      const newReply = { 
         author: author, 
         anonymous: isAnon, 
         text, 
         date: new Date().toISOString() 
-      });
+      };
+      pastes[idx].replies.push(newReply);
       savePastes(pastes);
       
+      // Sync reply to server
+      if (pastes[idx]._serverId) {
+        saveReplyToServer(pastes[idx]._serverId, newReply).catch(() => {});
+      }
+
       // Очистить форму
       form.querySelector(".pr-text").value = "";
       form.classList.remove("open");
@@ -7342,8 +7430,12 @@
         const author = anonymous ? "" : (session ? session.nickname || session.username : "");
 
         const pastes = getPastes();
-        pastes.unshift({ type, topic, author, anonymous, text, date: new Date().toISOString(), replies: [] });
+        const newPaste = { type, topic, author, anonymous, text, date: new Date().toISOString(), replies: [] };
+        pastes.unshift(newPaste);
         savePastes(pastes);
+
+        // Sync to server
+        savePasteToServer(newPaste).catch(() => {});
 
         // Auto-unlock OSINT'ER tag on first non-anonymous post
         if (!anonymous && session && session.username) {
