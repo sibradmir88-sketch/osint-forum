@@ -1,3 +1,8 @@
+console.log("=== OSINT Forum starting ===");
+console.log("CWD:", process.cwd());
+console.log("PORT:", process.env.PORT);
+console.log("NODE_ENV:", process.env.NODE_ENV);
+
 require("dotenv").config();
 const express       = require('express');
 const session       = require('express-session');
@@ -337,3 +342,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`OSINT Forum запущен на порту ${PORT}`);
   console.log(`Локально: http://localhost:${PORT}`);
 });
+console.log("=== Server module loaded ===");
