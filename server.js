@@ -221,7 +221,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use((req, res, next) => {
   req.user = req.session?.user || null;
-  if (req.user && isBanned(req.user.username) && !(req.method === 'DELETE' && req.path.startsWith('/api/admin/bans/'))) {
+  if (req.user && isBanned(req.user.username)) {
     req.user = null;
     delete req.session.user;
     req.session.save(() => {});
@@ -589,7 +589,6 @@ app.post('/api/admin/bans', (req, res) => {
 });
 
 app.delete('/api/admin/bans/:username', (req, res) => {
-  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM banned_users WHERE username=?').run(clean);
   backupDb();
