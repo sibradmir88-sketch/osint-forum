@@ -5808,6 +5808,7 @@
                 <div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(cre || '')}</span><span class="mod-post-date">${new Date(dat || Date.now()).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span>${c.source && c.source !== 'forum' ? `<span style="font-size:0.7rem;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:1px 6px;margin-left:6px;">${escapeHtml(c.source)}</span>` : ''}</div>
                 <div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(top || '')}<br><strong>Раздел:</strong> ${escapeHtml(c.section || c.source || 'форум')}<br><strong>Автор:</strong> ${escapeHtml(aut || '')}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}<br>${c.details ? `<div style="margin-top:10px;">${escapeHtml(c.details)}</div>` : ''}</div>
                 <div class="mod-post-actions">
+                  <button class="admin-btn info" onclick="goToComplaintPost('${c.source || 'forum'}', ${c.post_idx != null ? c.post_idx : 0})"><i class="fa-solid fa-arrow-right"></i> Перейти</button>
                   <button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button>
                   <button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button>
                   <button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button>
@@ -5818,6 +5819,14 @@
         </div>
       `;
     }
+
+    window.goToComplaintPost = function(source, idx) {
+      if (source === 'forum' || !source) {
+        openThreadPage(idx);
+      } else {
+        navigateTo(source, { scrollToIdx: idx });
+      }
+    };
 
     window.setComplaintStatus = function(id, status) {
       const complaints = getComplaints();
@@ -6324,7 +6333,7 @@
       function renderComplaintsTab() {
         const complaints = getComplaints();
         if (!complaints.length) return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы</div><div class="mod-empty"><i class="fa-regular fa-folder-open" style="font-size:2rem;margin-bottom:12px;display:block;"></i>Нет жалоб.</div></div>`;
-        return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы (${complaints.length})</div><div style="display:grid;gap:10px;">${complaints.map(c => `<div class="mod-post-card status-${c.status}"><div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.created_by || c.createdBy)}</span><span class="mod-post-date">${new Date(c.created_at || c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span>${c.source && c.source !== 'forum' ? `<span style="font-size:0.7rem;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:1px 6px;margin-left:6px;">${escapeHtml(c.source)}</span>` : ''}</div><div class="mod-post-text"><strong>Раздел:</strong> ${escapeHtml(c.section || c.source || 'форум')}<br><strong>Тема:</strong> ${escapeHtml(c.post_topic || c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.target_author || c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}${c.details?`<div style="margin-top:10px;">${escapeHtml(c.details)}</div>`:''}</div><div class="mod-post-actions"><button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button><button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button><button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button></div></div>`).join('')}</div></div>`;
+        return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы (${complaints.length})</div><div style="display:grid;gap:10px;">${complaints.map(c => `<div class="mod-post-card status-${c.status}"><div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.created_by || c.createdBy)}</span><span class="mod-post-date">${new Date(c.created_at || c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span>${c.source && c.source !== 'forum' ? `<span style="font-size:0.7rem;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:1px 6px;margin-left:6px;">${escapeHtml(c.source)}</span>` : ''}</div><div class="mod-post-text"><strong>Раздел:</strong> ${escapeHtml(c.section || c.source || 'форум')}<br><strong>Тема:</strong> ${escapeHtml(c.post_topic || c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.target_author || c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}${c.details?`<div style="margin-top:10px;">${escapeHtml(c.details)}</div>`:''}</div><div class="mod-post-actions"><button class="admin-btn info" onclick="goToComplaintPost('${c.source || 'forum'}', ${c.post_idx != null ? c.post_idx : 0})"><i class="fa-solid fa-arrow-right"></i> Перейти</button><button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button><button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button><button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button></div></div>`).join('')}</div></div>`;
       }
 
       // ── MODERATION tab (forum / services / moderators) ──
@@ -6864,9 +6873,32 @@
       return {
         route,
         moduleId: route === "manuals" ? url.searchParams.get("module") : null,
-        profileUsername: url.searchParams.get("u") || null,
-        threadId: route === "thread" ? parseInt(url.searchParams.get("t"), 10) : null
+        profileUsername: route === "viewprofile" ? url.searchParams.get("u") || null : null,
+        threadId: route === "thread" ? parseInt(url.searchParams.get("t"), 10) : null,
+        scrollToIdx: route === "services" || route === "moderators" ? parseInt(url.searchParams.get("s"), 10) : null
       };
+    }
+
+    function buildUrl(route, moduleId, extra) {
+      const url = new URL(window.location.href);
+      if (route === "home") {
+        url.searchParams.delete("view");
+        url.searchParams.delete("module");
+        url.searchParams.delete("u");
+        url.searchParams.delete("t");
+        url.searchParams.delete("s");
+      } else {
+        url.searchParams.set("view", route);
+        if (route === "manuals" && moduleId) url.searchParams.set("module", moduleId);
+        else url.searchParams.delete("module");
+        if (route === "viewprofile" && extra && extra.profileUsername) url.searchParams.set("u", extra.profileUsername);
+        else url.searchParams.delete("u");
+        if (route === "thread" && extra && typeof extra.threadId !== 'undefined') url.searchParams.set("t", extra.threadId);
+        else url.searchParams.delete("t");
+        if ((route === "services" || route === "moderators") && extra && typeof extra.scrollToIdx !== 'undefined') url.searchParams.set("s", extra.scrollToIdx);
+        else url.searchParams.delete("s");
+      }
+      return url;
     }
 
     function buildUrl(route, moduleId, extra) {
@@ -6897,7 +6929,7 @@
     }
 
     function renderRoute() {
-      const { route, moduleId, profileUsername, threadId } = getRouteStateFromUrl();
+      const { route, moduleId, profileUsername, threadId, scrollToIdx } = getRouteStateFromUrl();
       state.currentRoute = route;
       state.modalModuleId = moduleId;
 
@@ -6925,6 +6957,15 @@
       if (route === "forum") { renderPasteCards(); updateForumThreadCount(); updateForumAnonUI(); }
       if (route === "thread") renderThreadPage(threadId);
       if (route === "complaints") renderComplaintsPage();
+      if (route === "services" || route === "moderators") {
+        renderQuestionList(route);
+        if (typeof scrollToIdx === 'number' && !isNaN(scrollToIdx)) {
+          setTimeout(() => {
+            const card = document.querySelector(`#${route}QuestionList [data-qi="${scrollToIdx}"]`);
+            if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 200);
+        }
+      }
 
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
