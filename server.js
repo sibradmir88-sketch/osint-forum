@@ -12,6 +12,13 @@ const fs = require('fs');
 const crypto        = require('crypto');
 const DB_PATH = fs.existsSync('/data') ? '/data/forum.db' : 'forum.db';
 const db = new Database(DB_PATH);
+
+const app  = express();
+const PORT = process.env.PORT || 3000;
+
+const CONFIG = {
+  sessionSecret : process.env.SESSION_SECRET || 'CHANGE_ME_SECRET_32chars_min',
+};
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
