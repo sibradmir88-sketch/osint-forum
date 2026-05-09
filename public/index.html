@@ -3726,24 +3726,27 @@
     <div class="auth-modal">
       <button class="auth-modal-close" type="button" aria-label="Закрыть" onclick="closeComplaintModal()">×</button>
       <h2>Пожаловаться на сообщение</h2>
-      <p class="auth-modal-sub">Выберите причину жалобы и добавьте пояснение.</p>
+      <p class="auth-modal-sub">Выберите причину жалобы согласно правилам сообщества.</p>
       <div class="auth-error" id="complaintError"></div>
       <div class="auth-success" id="complaintSuccess"></div>
       <div class="auth-field">
         <label>Причина жалобы</label>
         <select id="complaintReason" class="paste-form-select">
-          <option value="">Выбрать причину</option>
-          <option value="Нарушение правил форума">Нарушение правил форума</option>
-          <option value="Доксинг / раскрытие личных данных">Доксинг / раскрытие личных данных</option>
-          <option value="Оскорбления или агрессия">Оскорбления или агрессия</option>
-          <option value="Спам или реклама">Спам или реклама</option>
-          <option value="Неподобающий контент">Неподобающий контент</option>
-          <option value="Другое">Другое</option>
+          <option value="">— Выбрать причину —</option>
+          <option value="Доксинг — раскрытие личных данных без согласия">Доксинг — раскрытие личных данных без согласия</option>
+          <option value="Оскорбления, грубость, переход на личности">Оскорбления, грубость, переход на личности</option>
+          <option value="Спам / реклама / флуд">Спам / реклама / флуд</option>
+          <option value="Сватиканг — публикация непроверенных обвинений">Сватиканг — публикация непроверенных обвинений</option>
+          <option value="Публикация непубличных баз данных / дампов">Публикация непубличных баз данных / дампов</option>
+          <option value="Плагиат — выдача чужих исследований за свои">Плагиат — выдача чужих исследований за свои</option>
+          <option value="Взлом / фишинг / незаконная деятельность">Взлом / фишинг / незаконная деятельность</option>
+          <option value="Реклама услуг в чужих темах">Реклама услуг в чужих темах</option>
+          <option value="Другое нарушение">Другое нарушение</option>
         </select>
       </div>
       <div class="auth-field">
-        <label>Комментарий</label>
-        <textarea id="complaintDetails" class="paste-form-textarea" rows="4" placeholder="Опишите, что именно не так..."></textarea>
+        <label>Комментарий (необязательно)</label>
+        <textarea id="complaintDetails" class="paste-form-textarea" rows="4" placeholder="Добавьте подробности..."></textarea>
       </div>
       <button class="auth-submit-btn" onclick="submitComplaint()">
         <i class="fa-solid fa-flag"></i> Отправить жалобу
@@ -4201,9 +4204,17 @@
         return;
       }
 
-      listEl.innerHTML = questions.map((q, qi) => {
+      // Sort pinned first
+      const sorted = [...questions].sort((a, b) => (b._pinned ? 1 : 0) - (a._pinned ? 1 : 0));
+
+      listEl.innerHTML = sorted.map((q, qi) => {
+        // Find original index for callbacks
+        const origIdx = questions.indexOf(q);
         const authorName = escapeHtml(q.author || "Аноним");
         const initial = getInitial(q.author || "А");
+        const statusDot = q._status === "pending" ? `<span style="margin-left:6px;font-size:0.7rem;background:rgba(217,119,6,0.2);color:#fbbf24;border:1px solid rgba(217,119,6,0.4);border-radius:10px;padding:1px 7px;">⏳ На рассмотрении</span>` :
+                          q._status === "read" ? `<span style="margin-left:6px;font-size:0.7rem;background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.4);border-radius:10px;padding:1px 7px;">✓ Прочитано</span>` : "";
+        const pinnedBadge = q._pinned ? `<span style="font-size:0.7rem;background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid rgba(139,92,246,0.4);border-radius:10px;padding:1px 7px;margin-right:6px;">📌 Закреплено</span>` : "";
         const repliesHtml = (q.replies || []).map(r => {
           const rName = escapeHtml(r.author || "Аноним");
           const rInit = getInitial(r.author || "А");
@@ -4221,14 +4232,32 @@
             </div>`;
         }).join("");
 
+        const sectionLabel = section === 'services' ? 'услуги' : 'модераторы';
+        const session = getSession();
+        const isAdm = session && isModeratorOrAdmin(session.username);
+        const menuHtml = isAdm ? `<div class="post-menu-wrap">
+          <button class="post-menu-btn" onclick="sectionOpenMenu('${section}',${origIdx},this)" title="Действия">⋯</button>
+          <div class="post-dropdown" id="smenu-${section}-${origIdx}">
+            <button class="post-dropdown-item info" onclick="openComplaintModal(${origIdx},'${section}','${sectionLabel}')"><i class="fa-solid fa-flag"></i> Пожаловаться</button>
+            <div class="post-dropdown-sep"></div>
+            <button class="post-dropdown-item ok" onclick="modSetStatus('${section}',${origIdx},'read')"><i class="fa-solid fa-eye"></i> Прочитано</button>
+            <button class="post-dropdown-item warn" onclick="modSetStatus('${section}',${origIdx},'pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button>
+            <button class="post-dropdown-item info" onclick="sectionPinPost('${section}',${origIdx})"><i class="fa-solid fa-thumbtack"></i> ${q._pinned ? 'Открепить' : 'Закрепить'}</button>
+            <div class="post-dropdown-sep"></div>
+            ${q.author && q.author !== 'Аноним' ? `<button class="post-dropdown-item danger" onclick="banUser('${escapeHtml(q.author)}')"><i class="fa-solid fa-ban"></i> Бан @${escapeHtml(q.author)}</button>` : ''}
+            <button class="post-dropdown-item danger" onclick="modDeletePost('${section}',${origIdx})"><i class="fa-solid fa-trash"></i> Удалить пост</button>
+          </div>
+        </div>` : '';
+
         return `
-          <div class="post-card" data-qi="${qi}" data-section="${section}">
+          <div class="post-card" data-qi="${origIdx}" data-section="${section}">
             <div class="post-header">
               <div class="post-avatar">${initial}</div>
               <div class="post-author-info">
-                <span class="post-author-name">${authorName}</span>
+                <span class="post-author-name">${pinnedBadge}${authorName} ${statusDot}</span>
                 <span class="post-date">${formatDate(q.date)}</span>
               </div>
+              ${menuHtml}
             </div>
             ${q.author && !q.anonymous ? renderUserTagsHtml(getUserProfile(q.author) || {activeTags: getUserTags(q.author)}) : ""}
             <div class="post-body">${escapeHtml(q.text)}</div>
@@ -4570,23 +4599,29 @@
     function initThemeToggle() {
       const themeToggle = document.getElementById("themeToggle");
       const themeIcon = document.getElementById("themeIcon");
-      const storageKey = "osint-forum-theme";
 
       function applyTheme(theme) {
         document.body.setAttribute("data-theme", theme);
-        // В темной теме показываем солнце, в светлой — луну.
         themeIcon.className = theme === "dark" ? "fa-solid fa-sun" : "fa-solid fa-moon";
       }
 
-      const savedTheme = localStorage.getItem(storageKey);
-      const initialTheme = savedTheme === "light" ? "light" : "dark";
-      applyTheme(initialTheme);
+      // Load theme from server
+      fetch('/api/user/theme').then(r => r.json()).then(data => {
+        const t = data.theme || 'dark';
+        applyTheme(t);
+      }).catch(() => applyTheme('dark'));
 
       themeToggle.addEventListener("click", () => {
         const currentTheme = document.body.getAttribute("data-theme") || "dark";
         const nextTheme = currentTheme === "dark" ? "light" : "dark";
-        localStorage.setItem(storageKey, nextTheme);
         applyTheme(nextTheme);
+        if (getSession()) {
+          fetch('/api/user/theme', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: nextTheme }),
+          }).catch(() => {});
+        }
       });
     }
 
@@ -4915,6 +4950,11 @@
         // Check auth first
         const meRes = await fetch('/api/auth/me');
         const meData = await meRes.json();
+        if (meData.banned) {
+          appCache.session = null;
+          appCache.banned = true;
+          return false;
+        }
         appCache.session = meData.user || null;
 
         // Fetch all data
@@ -5311,7 +5351,13 @@
 
 
     async function checkServerAuth() {
-      await loadAllFromServer();
+      const loaded = await loadAllFromServer();
+      if (appCache.banned) {
+        const container = document.querySelector("#page-home .container") || document.querySelector(".container");
+        if (container) {
+          container.innerHTML = `<div style="text-align:center;padding:80px 20px;"><div style="font-size:4rem;margin-bottom:20px;">⛔</div><h2>Ваш аккаунт заблокирован</h2><p style="color:var(--text-muted);margin-top:12px;">Вы не можете выполнять действия на форуме. Обратитесь к администратору.</p></div>`;
+        }
+      }
       updateNavForUser();
     }
 
@@ -5457,15 +5503,28 @@
       return [...new Set(tags)];
     }
 
-    function openComplaintModal(idx) {
-      const pastes = getPastes();
-      const post = pastes[idx];
-      if (!post) return;
+    function openComplaintModal(idx, source, section) {
       const overlay = document.getElementById("complaintOverlay");
       if (!overlay) return;
+      let post, topic, author;
+      if (source === 'forum' || !source) {
+        const pastes = getPastes();
+        post = pastes[idx];
+        if (!post) return;
+        topic = post.topic;
+        author = post.anonymous ? "Аноним" : (post.author || "Аноним");
+      } else {
+        const questions = getSavedQuestions(source);
+        post = questions[idx];
+        if (!post) return;
+        topic = post.text.slice(0, 80);
+        author = post.author || "Аноним";
+      }
       overlay.dataset.targetIdx = idx;
-      overlay.dataset.targetTopic = post.topic;
-      overlay.dataset.targetAuthor = post.anonymous ? "Аноним" : (post.author || "Аноним");
+      overlay.dataset.targetSource = source || 'forum';
+      overlay.dataset.targetSection = section || '';
+      overlay.dataset.targetTopic = topic;
+      overlay.dataset.targetAuthor = author;
       document.getElementById("complaintReason").value = "";
       document.getElementById("complaintDetails").value = "";
       document.getElementById("complaintError").textContent = "";
@@ -5488,16 +5547,19 @@
       const successEl = document.getElementById("complaintSuccess");
       if (!reason) { if (errorEl) errorEl.textContent = "Выберите причину жалобы"; return; }
       const targetIdx = parseInt(overlay.dataset.targetIdx, 10);
-      const pastes = getPastes();
-      const post = pastes[targetIdx];
-      if (!post) { if (errorEl) errorEl.textContent = "Пост не найден."; return; }
+      const source = overlay.dataset.targetSource || 'forum';
+      const section = overlay.dataset.targetSection || '';
+      const targetTopic = overlay.dataset.targetTopic || '';
+      const targetAuthor = overlay.dataset.targetAuthor || 'Аноним';
       const session = getSession();
       const complaint = {
         post_idx: targetIdx,
-        post_topic: post.topic,
-        target_author: post.anonymous ? "Аноним" : (post.author || "Аноним"),
+        post_topic: targetTopic,
+        target_author: targetAuthor,
         reason,
         details,
+        source,
+        section,
       };
       fetch('/api/complaints', {
         method: 'POST',
@@ -5513,7 +5575,7 @@
         if (errorEl) errorEl.textContent = "Ошибка отправки.";
       });
       // Optimistic update
-      const newComplaint = { id: "c_" + Math.random().toString(36).slice(2,10), ...complaint, status: "new", created_by: session?.username || "Гость", created_at: new Date().toISOString() };
+      const newComplaint = { id: "c_" + Math.random().toString(36).slice(2,10), ...complaint, status: "new", source: source, section: section, created_by: session?.username || "Гость", created_at: new Date().toISOString() };
       const complaints = getComplaints();
       complaints.unshift(newComplaint);
       appCache.complaints = complaints;
@@ -5644,13 +5706,12 @@
           <div style="display:grid;gap:12px;">
             ${complaints.map(c => {
               return `<div class="mod-post-card status-${c.status}">
-                <div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span></div>
-                <div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}<br>${c.details ? `<div style="margin-top:10px;">${escapeHtml(c.details)}</div>` : ''}</div>
+                <div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span>${c.source && c.source !== 'forum' ? `<span style="font-size:0.7rem;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:1px 6px;margin-left:6px;">${escapeHtml(c.source)}</span>` : ''}</div>
+                <div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Раздел:</strong> ${escapeHtml(c.section || c.source || 'форум')}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}<br>${c.details ? `<div style="margin-top:10px;">${escapeHtml(c.details)}</div>` : ''}</div>
                 <div class="mod-post-actions">
                   <button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button>
                   <button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button>
                   <button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button>
-                  <button class="admin-btn info" onclick="navigateTo('thread',{threadId:${c.postIdx}})"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть тему</button>
                 </div>
               </div>`;
             }).join('')}
@@ -6164,7 +6225,7 @@
       function renderComplaintsTab() {
         const complaints = getComplaints();
         if (!complaints.length) return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы</div><div class="mod-empty"><i class="fa-regular fa-folder-open" style="font-size:2rem;margin-bottom:12px;display:block;"></i>Нет жалоб.</div></div>`;
-        return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы (${complaints.length})</div><div style="display:grid;gap:10px;">${complaints.map(c => `<div class="mod-post-card status-${c.status}"><div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span></div><div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}${c.details?`<div style="margin-top:10px;">${escapeHtml(c.details)}</div>`:''}</div><div class="mod-post-actions"><button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button><button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button><button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button><button class="admin-btn info" onclick="navigateTo('thread',{threadId:${c.postIdx}})"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть тему</button></div></div>`).join('')}</div></div>`;
+        return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы (${complaints.length})</div><div style="display:grid;gap:10px;">${complaints.map(c => `<div class="mod-post-card status-${c.status}"><div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span>${c.source && c.source !== 'forum' ? `<span style="font-size:0.7rem;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:1px 6px;margin-left:6px;">${escapeHtml(c.source)}</span>` : ''}</div><div class="mod-post-text"><strong>Раздел:</strong> ${escapeHtml(c.section || c.source || 'форум')}<br><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}${c.details?`<div style="margin-top:10px;">${escapeHtml(c.details)}</div>`:''}</div><div class="mod-post-actions"><button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button><button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button><button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button></div></div>`).join('')}</div></div>`;
       }
 
       // ── MODERATION tab (forum / services / moderators) ──
@@ -7025,6 +7086,34 @@
           document.removeEventListener("click", close);
         });
       }, 50);
+    };
+
+    window.sectionOpenMenu = function(section, idx, btn) {
+      document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
+      const menu = document.getElementById("smenu-" + section + "-" + idx);
+      if (!menu) return;
+      menu.classList.toggle("open");
+      setTimeout(() => {
+        document.addEventListener("click", function close(e) {
+          if (!menu.contains(e.target) && e.target !== btn) menu.classList.remove("open");
+          document.removeEventListener("click", close);
+        });
+      }, 50);
+    };
+
+    window.sectionPinPost = function(section, idx) {
+      document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
+      const questions = getSavedQuestions(section);
+      const post = questions[idx];
+      if (!post) return;
+      const newPinned = !post._pinned;
+      post._pinned = newPinned;
+      saveQuestions(section, questions);
+      if (post._serverId) {
+        fetch('/api/sections/' + encodeURIComponent(section) + '/' + post._serverId + '/pin', { method: 'PATCH' }).catch(() => {});
+      }
+      showReplyToast(newPinned ? "📌 Пост закреплён!" : "📌 Откреплён!");
+      renderQuestionList(section);
     };
 
     window.menuDeletePost = function(idx) {

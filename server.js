@@ -116,6 +116,8 @@ db.exec(`
     reason       TEXT    DEFAULT '',
     details      TEXT    DEFAULT '',
     status       TEXT    DEFAULT 'new',
+    source       TEXT    DEFAULT 'forum',
+    section      TEXT    DEFAULT '',
     created_by   TEXT    DEFAULT '',
     created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
   );
@@ -147,6 +149,7 @@ db.exec(`
 try { db.exec("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN avatar_color TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN avatar_emoji TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'dark'"); } catch(e) {}
 
 // Thread status & pin columns
 try { db.exec("ALTER TABLE threads ADD COLUMN status TEXT NOT NULL DEFAULT 'new'"); } catch(e) {}
@@ -163,6 +166,8 @@ db.exec(`
   );
 `);
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_rate_limits ON rate_limits(username, action, created_at)"); } catch(e) {}
+try { db.exec("ALTER TABLE complaints ADD COLUMN source TEXT DEFAULT 'forum'"); } catch(e) {}
+try { db.exec("ALTER TABLE complaints ADD COLUMN section TEXT DEFAULT ''"); } catch(e) {}
 
 ['illuminatov', 'detailing'].forEach(u => {
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
@@ -180,6 +185,10 @@ function isOwner(username) {
   if (!username) return false;
   return !!db.prepare("SELECT username FROM owners WHERE username=?").get(username.toLowerCase());
 }
+function isBanned(username) {
+  if (!username) return false;
+  return !!db.prepare("SELECT username FROM banned_users WHERE username=?").get(username.toLowerCase());
+}
 
 function hashPassword(pw) {
   return crypto.createHash('sha256').update(pw + 'osint_salt_42').digest('hex');
@@ -190,6 +199,8 @@ function safeUser(u) {
   return { id: u.id, username: u.username, nickname: u.nickname || u.username,
            avatar: u.avatar, avatar_img: u.avatar_img, provider: u.provider,
            active_tags: JSON.parse(u.active_tags || '["BEGINNER"]'),
+           theme: u.theme || 'dark',
+           is_banned: isBanned(u.username),
            is_admin: isAdmin(u.username),
            is_moderator: isModerator(u.username),
            is_owner: isOwner(u.username) };
@@ -208,6 +219,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use((req, res, next) => {
   req.user = req.session?.user || null;
+  // Check ban for authenticated users
+  if (req.user && isBanned(req.user.username)) {
+    req.session.destroy();
+    return res.json({ ok: false, error: 'Ваш аккаунт заблокирован.', banned: true });
+  }
   next();
 });
 
@@ -259,7 +275,12 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 app.get('/api/auth/me', (req, res) => {
-  res.json({ user: safeUser(req.user) });
+  const u = safeUser(req.user);
+  if (u && isBanned(u.username)) {
+    req.session.destroy();
+    return res.json({ user: null, banned: true });
+  }
+  res.json({ user: u });
 });
 
 // Cross-device sync: returns all role lists and user tags
@@ -278,7 +299,7 @@ app.get('/api/sync/full', (req, res) => {
   const admins = db.prepare('SELECT username FROM admin_usernames').all().map(r => r.username);
   const moderators = db.prepare('SELECT username FROM moderators').all().map(r => r.username);
   const owners = db.prepare('SELECT username FROM owners').all().map(r => r.username);
-  const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 200').all();
+  const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 500').all();
   const banned = db.prepare('SELECT username FROM banned_users').all().map(r => r.username);
   const muted = db.prepare('SELECT username, expires_at FROM muted_users').all();
   const users = db.prepare("SELECT username, nickname, avatar, avatar_img, active_tags, bio, avatar_color, avatar_emoji, created_at FROM users").all();
@@ -436,6 +457,21 @@ app.post('/api/sections/:section', (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
+// ── Theme preference (server-side, no localStorage) ─────────────
+app.get('/api/user/theme', (req, res) => {
+  if (!req.user) return res.json({ ok: true, theme: 'dark' });
+  const u = db.prepare('SELECT theme FROM users WHERE id=?').get(req.user.id);
+  res.json({ ok: true, theme: u?.theme || 'dark' });
+});
+
+app.patch('/api/user/theme', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  const { theme } = req.body;
+  if (theme !== 'dark' && theme !== 'light') return res.json({ ok: false, error: 'Некорректная тема.' });
+  db.prepare('UPDATE users SET theme=? WHERE id=?').run(theme, req.user.id);
+  res.json({ ok: true });
+});
+
 app.post('/api/sections/:section/:postId/replies', (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.json({ ok: false, error: 'Пустой ответ.' });
@@ -497,7 +533,7 @@ app.patch('/api/users/me', (req, res) => {
 // ── Complaints CRUD ──────────────────────────────────────────
 app.post('/api/complaints', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  const { post_idx, post_topic, target_author, reason, details } = req.body;
+  const { post_idx, post_topic, target_author, reason, details, source, section } = req.body;
   if (!reason) return res.json({ ok: false, error: 'Укажите причину.' });
   const id = 'c_' + Math.random().toString(36).slice(2, 10);
   db.prepare(`INSERT INTO complaints (id, post_idx, post_topic, target_author, reason, details, created_by)
@@ -511,7 +547,7 @@ app.get('/api/complaints', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
   if (!isAdmin(req.user.username) && !isModerator(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
-  const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 200').all();
+  const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 500').all();
   res.json({ ok: true, complaints });
 });
 
