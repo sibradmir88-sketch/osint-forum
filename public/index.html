@@ -4301,23 +4301,13 @@
 
     /* ── ANTI-SPAM ─────────────────────────────────────────────── */
     const SPAM = {
-      cooldownMs: 30000,          // 30 сек между постами
-      cooldownReplyMs: 10000,     // 10 сек между ответами
-      maxPerHour: 8,              // максимум постов за час
-      minLength: 5,               // минимальная длина текста
-      maxLength: 5000,            // максимальная длина
-      dupWindowMs: 300000,        // окно проверки дублей (5 мин)
-      spamPatterns: [             // regexp-паттерны спама
-        /(.)\1{19,}/,             // 20+ одинаковых символов подряд
-        /(https?:\/\/\S+\s*){10,}/i, // 10+ ссылок в одном сообщении
-        /(\b\w+\b)(\s+\1){19,}/i // слово повторяется 20+ раз
+      minLength: 5,
+      maxLength: 5000,
+      spamPatterns: [
+        /(.)\1{19,}/,
+        /(https?:\/\/\S+\s*){10,}/i,
+        /(\b\w+\b)(\s+\1){19,}/i
       ]
-    };
-
-    const SPAM_KEYS = {
-      lastPost:  "osint_spam_last_post",
-      lastReply: "osint_spam_last_reply",
-      hourLog:   "osint_spam_hour_log"
     };
 
     /* ── ANTI-DDOS ──────────────────────────────────────────────── */
@@ -4454,20 +4444,16 @@
       const hp = formEl.querySelector(".hp-field");
       if (hp && hp.value.trim() !== "") return false; // тихо блокируем ботов
 
-      const now = Date.now();
-
       // минимальная длина
       if (text.length < SPAM.minLength) {
         spamShowError(formEl, `Сообщение слишком короткое (минимум ${SPAM.minLength} символов).`);
         return false;
       }
-
       // максимальная длина
       if (text.length > SPAM.maxLength) {
         spamShowError(formEl, `Сообщение слишком длинное (максимум ${SPAM.maxLength} символов).`);
         return false;
       }
-
       // паттерны спама
       for (const rx of SPAM.spamPatterns) {
         if (rx.test(text)) {
@@ -4475,33 +4461,6 @@
           return false;
         }
       }
-
-      // кулдаун
-      const coolKey = isReply ? SPAM_KEYS.lastReply : SPAM_KEYS.lastPost;
-      const coolMs  = isReply ? SPAM.cooldownReplyMs : SPAM.cooldownMs;
-      const lastTs  = parseInt(localStorage.getItem(coolKey) || "0", 10);
-      const diff    = now - lastTs;
-      if (diff < coolMs) {
-        const sec = Math.ceil((coolMs - diff) / 1000);
-        spamShowError(formEl, `Подождите ещё ${sec} сек. перед следующим сообщением.`);
-        return false;
-      }
-
-      // лимит за час (только для новых постов)
-      if (!isReply) {
-        let log = [];
-        try { log = JSON.parse(localStorage.getItem(SPAM_KEYS.hourLog) || "[]"); } catch {}
-        log = log.filter(t => now - t < 3600000); // оставляем только последний час
-        if (log.length >= SPAM.maxPerHour) {
-          spamShowError(formEl, `Превышен лимит сообщений. Попробуйте через час.`);
-          return false;
-        }
-        log.push(now);
-        localStorage.setItem(SPAM_KEYS.hourLog, JSON.stringify(log));
-      }
-
-      // сохраняем время последней отправки
-      localStorage.setItem(coolKey, String(now));
       return true;
     }
     /* ── END ANTI-SPAM ──────────────────────────────────────────── */
@@ -4523,6 +4482,17 @@
           if (!text) return;
 
           if (!spamCheck(text, form, false)) return;
+
+          // Server-side rate limit
+          try {
+            const rateRes = await fetch('/api/check-rate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'section_post' }),
+            });
+            const rateData = await rateRes.json();
+            if (!rateData.ok) { return; }
+          } catch(e) {}
 
           try {
             const res = await fetch('/api/sections/' + encodeURIComponent(section), {
@@ -4998,7 +4968,10 @@
           author: t.anonymous ? '' : (t.nickname || t.username || ''),
           anonymous: !!t.anonymous,
           date: t.created_at,
+          _status: t.status || 'new',
+          _pinned: !!t.pinned,
           replies: (t.replies || []).map(r => ({
+            _serverId: r.id,
             author: r.anonymous ? '' : (r.nickname || r.username || ''),
             anonymous: !!r.anonymous,
             text: r.text,
@@ -5017,7 +4990,10 @@
             anonymous: !sp.author_id,
             text: sp.text,
             date: sp.created_at,
+            _status: sp.status || 'new',
+            _pinned: !!sp.pinned,
             replies: (sp.replies || []).map(r => ({
+              _serverId: r.id,
               author: r.anonymous ? '' : (r.nickname || r.username || ''),
               anonymous: !r.author_id,
               text: r.text,
@@ -5559,6 +5535,7 @@
       }
       const session = getSession();
       const isAdm = session && isModeratorOrAdmin(session.username);
+      const isOwn = session && post.author && post.author.toLowerCase() === session.username.toLowerCase();
       const author = post.anonymous ? "Аноним" : (post.author || "Аноним");
       const replies = post.replies || [];
       const profile = !post.anonymous && post.author ? getUserProfile(post.author) : null;
@@ -5568,13 +5545,14 @@
       container.innerHTML = `
         <div class="thread-header">
           <div class="thread-breadcrumbs"><a href="/forum" onclick="event.preventDefault();navigateTo('forum');">Форум</a> · <span>${escapeHtml(typeInfo.label)}</span></div>
-          <h1>${escapeHtml(post.topic)}</h1>
+          <h1>${post._pinned ? '📌 ' : ''}${escapeHtml(post.topic)}</h1>
           <div class="thread-meta">
             <span>Автор: ${escapeHtml(author)}</span>
             <span>${pasteFormatDate(post.date)}</span>
             <span>${replies.length} ${replies.length===1? 'ответ':'ответов'}</span>
           </div>
           ${threadActions}
+          ${(isAdm || isOwn) ? `<button class="admin-btn danger" onclick="deleteThreadFromPage(${threadId})" style="margin-top:8px;"><i class="fa-solid fa-trash"></i> Удалить тему</button>` : ''}
         </div>
         <div class="thread-card">
           <div class="paste-card-header">
@@ -5594,14 +5572,58 @@
         </div>
         <div class="thread-replies">
           <h2>Ответы (${replies.length})</h2>
-          ${replies.length ? replies.map(r => {
+          ${replies.length ? replies.map((r, ri) => {
             const rauthor = r.anonymous ? 'Аноним' : (r.author || 'Аноним');
             const rprofile = !r.anonymous && r.author ? getUserProfile(r.author) : null;
-            return `<div class="paste-reply-card"><div class="paste-card-header"><div class="paste-avatar">${pasteInitial(r.anonymous ? 'А' : r.author)}</div><div class="paste-meta"><div class="paste-author-line"><span class="paste-author-name">${escapeHtml(rauthor)}</span><span class="paste-date">${pasteFormatDate(r.date)}</span></div></div></div>${rprofile ? renderUserTagsHtml(rprofile) : ''}<div class="paste-body">${pasteEscape(r.text)}</div></div>`;
+            const rIsOwn = session && r.author && r.author.toLowerCase() === session.username.toLowerCase();
+            const canDelReply = isAdm || rIsOwn;
+            return `<div class="paste-reply-card">
+              <div class="paste-card-header">
+                <div class="paste-avatar">${pasteInitial(r.anonymous ? 'А' : r.author)}</div>
+                <div class="paste-meta">
+                  <div class="paste-author-line">
+                    <span class="paste-author-name">${escapeHtml(rauthor)}</span>
+                    <span class="paste-date">${pasteFormatDate(r.date)}</span>
+                  </div>
+                </div>
+                ${canDelReply ? `<button class="post-menu-btn" onclick="deleteReplyFromThread(${threadId},${ri})" title="Удалить ответ" style="font-size:0.8rem;padding:2px 8px;">🗑️</button>` : ''}
+              </div>
+              ${rprofile ? renderUserTagsHtml(rprofile) : ''}
+              <div class="paste-body">${pasteEscape(r.text)}</div>
+            </div>`;
           }).join('') : `<div class="paste-empty" style="padding:24px;">Нет ответов. Станьте первым!</div>`}
         </div>
       `;
     }
+
+    window.deleteThreadFromPage = function(idx) {
+      if (!confirm("Удалить эту тему навсегда?")) return;
+      const pastes = getPastes();
+      const post = pastes[idx];
+      if (!post) return;
+      if (post._serverId) {
+        fetch('/api/threads/' + post._serverId, { method: 'DELETE' }).catch(() => {});
+      }
+      pastes.splice(idx, 1);
+      appCache.threads = pastes;
+      navigateTo('forum');
+      showReplyToast("✓ Тема удалена!");
+    };
+
+    window.deleteReplyFromThread = function(threadIdx, replyIdx) {
+      if (!confirm("Удалить этот ответ?")) return;
+      const pastes = getPastes();
+      const post = pastes[threadIdx];
+      if (!post || !post.replies) return;
+      const reply = post.replies[replyIdx];
+      if (reply?._serverId && post._serverId) {
+        fetch('/api/threads/' + post._serverId + '/replies/' + reply._serverId, { method: 'DELETE' }).catch(() => {});
+      }
+      post.replies.splice(replyIdx, 1);
+      appCache.threads = pastes;
+      renderThreadPage(threadIdx);
+      showReplyToast("✓ Ответ удалён!");
+    };
 
     function renderComplaintsPage() {
       const container = document.getElementById("complaintsPageContent");
@@ -5622,10 +5644,10 @@
           <div style="display:grid;gap:12px;">
             ${complaints.map(c => {
               return `<div class="mod-post-card status-${c.status}">
-                <div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='pending'?'На рассмотрении':'Решено'}</span></div>
+                <div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span></div>
                 <div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}<br>${c.details ? `<div style="margin-top:10px;">${escapeHtml(c.details)}</div>` : ''}</div>
                 <div class="mod-post-actions">
-                  <button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Взять в работу</button>
+                  <button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button>
                   <button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button>
                   <button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button>
                   <button class="admin-btn info" onclick="navigateTo('thread',{threadId:${c.postIdx}})"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть тему</button>
@@ -6142,7 +6164,7 @@
       function renderComplaintsTab() {
         const complaints = getComplaints();
         if (!complaints.length) return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы</div><div class="mod-empty"><i class="fa-regular fa-folder-open" style="font-size:2rem;margin-bottom:12px;display:block;"></i>Нет жалоб.</div></div>`;
-        return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы (${complaints.length})</div><div style="display:grid;gap:10px;">${complaints.map(c => `<div class="mod-post-card status-${c.status}"><div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='pending'?'На рассмотрении':'Решено'}</span></div><div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}${c.details?`<div style="margin-top:10px;">${escapeHtml(c.details)}</div>`:''}</div><div class="mod-post-actions"><button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Взять в работу</button><button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button><button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button><button class="admin-btn info" onclick="navigateTo('thread',{threadId:${c.postIdx}})"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть тему</button></div></div>`).join('')}</div></div>`;
+        return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы (${complaints.length})</div><div style="display:grid;gap:10px;">${complaints.map(c => `<div class="mod-post-card status-${c.status}"><div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span></div><div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}${c.details?`<div style="margin-top:10px;">${escapeHtml(c.details)}</div>`:''}</div><div class="mod-post-actions"><button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button><button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button><button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button><button class="admin-btn info" onclick="navigateTo('thread',{threadId:${c.postIdx}})"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть тему</button></div></div>`).join('')}</div></div>`;
       }
 
       // ── MODERATION tab (forum / services / moderators) ──
@@ -6363,10 +6385,24 @@
     window.modSetStatus = function(source, idx, status) {
       if (source === "forum") {
         const pastes = getPastes();
-        if (pastes[idx]) { pastes[idx]._status = status; appCache.threads = pastes; }
+        const post = pastes[idx];
+        if (post) {
+          post._status = status;
+          appCache.threads = pastes;
+          if (post._serverId) {
+            fetch('/api/threads/' + post._serverId + '/status', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status }),
+            }).catch(() => {});
+          }
+        }
       } else {
         const questions = getSavedQuestions(source);
-        if (questions[idx]) { questions[idx]._status = status; saveQuestions(source, questions); }
+        if (questions[idx]) {
+          questions[idx]._status = status;
+          saveQuestions(source, questions);
+        }
       }
       renderAdminPage(source);
     };
@@ -6375,6 +6411,10 @@
       if (!confirm("Удалить это сообщение?")) return;
       if (source === "forum") {
         const pastes = getPastes();
+        const post = pastes[idx];
+        if (post?._serverId) {
+          fetch('/api/threads/' + post._serverId, { method: 'DELETE' }).catch(() => {});
+        }
         pastes.splice(idx, 1);
         appCache.threads = pastes;
       } else {
@@ -6837,9 +6877,9 @@
     }
 
     async function saveReplyToServer(threadId, reply) {
-      if (!threadId) return;
+      if (!threadId) return null;
       try {
-        await fetch('/api/threads/' + threadId + '/replies', {
+        const res = await fetch('/api/threads/' + threadId + '/replies', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -6847,7 +6887,10 @@
             anonymous: reply.anonymous
           })
         });
-      } catch(e) { console.error('saveReplyToServer error:', e); }
+        const data = await res.json();
+        if (data.ok && data.id) return data.id;
+        return null;
+      } catch(e) { console.error('saveReplyToServer error:', e); return null; }
     }
 
     /* ── Helpers ─────────────────────────────────────────────── */
@@ -6988,10 +7031,16 @@
       document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
       if (!confirm("Удалить этот пост?")) return;
       const pastes = getPastes();
+      const post = pastes[idx];
+      if (!post) return;
+      if (post._serverId) {
+        fetch('/api/threads/' + post._serverId, { method: 'DELETE' }).catch(() => {});
+      }
       pastes.splice(idx, 1);
       appCache.threads = pastes;
       renderPasteCards();
       updateForumThreadCount();
+      showReplyToast("✓ Пост удалён!");
     };
 
     window.menuBanAuthor = function(author) {
@@ -7010,7 +7059,17 @@
     window.menuSetStatus = function(idx, status) {
       document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
       const pastes = getPastes();
-      if (pastes[idx]) { pastes[idx]._status = status; appCache.threads = pastes; }
+      const post = pastes[idx];
+      if (!post) return;
+      post._status = status;
+      appCache.threads = pastes;
+      if (post._serverId) {
+        fetch('/api/threads/' + post._serverId + '/status', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        }).catch(() => {});
+      }
       showReplyToast("✓ Статус обновлён!");
       renderPasteCards();
     };
@@ -7023,8 +7082,15 @@
     window.menuPinPost = function(idx) {
       document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
       const pastes = getPastes();
-      if (pastes[idx]) { pastes[idx]._pinned = !pastes[idx]._pinned; appCache.threads = pastes; }
-      showReplyToast(getPastes()[idx]?._pinned ? "📌 Пост закреплён!" : "📌 Открепён!");
+      const post = pastes[idx];
+      if (!post) return;
+      const newPinned = !post._pinned;
+      post._pinned = newPinned;
+      appCache.threads = pastes;
+      if (post._serverId) {
+        fetch('/api/threads/' + post._serverId + '/pin', { method: 'PATCH' }).catch(() => {});
+      }
+      showReplyToast(newPinned ? "📌 Пост закреплён!" : "📌 Откреплён!");
       renderPasteCards();
     };
 
@@ -7054,7 +7120,7 @@
       }
 
       const views = getViews();
-      const userId = session ? session.username : "anon_" + (localStorage.getItem("osint_anon_id") || "guest");
+      const userId = session ? session.username : "anon_" + Math.random().toString(36).slice(2, 8);
 
       container.innerHTML = pastes.map((p) => {
         const allPastes = getPastes();
@@ -7256,7 +7322,9 @@
       
       // Sync reply to server
       if (pastes[idx]._serverId) {
-        saveReplyToServer(pastes[idx]._serverId, newReply).catch(() => {});
+        saveReplyToServer(pastes[idx]._serverId, newReply).then(id => {
+          if (id) { newReply._serverId = id; }
+        }).catch(() => {});
       }
 
       // Очистить форму
@@ -7389,7 +7457,7 @@
       // Init anon UI on load
       updateForumAnonUI();
 
-      form.addEventListener("submit", (e) => {
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
         // honeypot check
@@ -7402,6 +7470,25 @@
         const anonymous = document.getElementById("newPasteAnon").checked;
 
         if (!topic || !text) return;
+
+        // Server-side rate limit check
+        try {
+          const rateRes = await fetch('/api/check-rate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'new_post' }),
+          });
+          const rateData = await rateRes.json();
+          if (!rateData.ok) {
+            const statusEl = document.getElementById("forumPostStatus");
+            if (statusEl) {
+              statusEl.textContent = "⏳ " + (rateData.error || "Лимит превышен");
+              statusEl.style.color = "#fca5a5";
+              setTimeout(() => { statusEl.textContent = ""; }, 3000);
+            }
+            return;
+          }
+        } catch(e) {}
 
         // Get author from session (no manual input field)
         const session = pasteGetCurrentUser();

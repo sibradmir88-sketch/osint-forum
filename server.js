@@ -148,6 +148,22 @@ try { db.exec("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN avatar_color TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN avatar_emoji TEXT DEFAULT ''"); } catch(e) {}
 
+// Thread status & pin columns
+try { db.exec("ALTER TABLE threads ADD COLUMN status TEXT NOT NULL DEFAULT 'new'"); } catch(e) {}
+try { db.exec("ALTER TABLE threads ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"); } catch(e) {}
+try { db.exec("ALTER TABLE section_posts ADD COLUMN status TEXT NOT NULL DEFAULT 'new'"); } catch(e) {}
+try { db.exec("ALTER TABLE section_posts ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"); } catch(e) {}
+
+// Server-side rate limit table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    username   TEXT    NOT NULL,
+    action     TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_rate_limits ON rate_limits(username, action, created_at)"); } catch(e) {}
+
 ['illuminatov', 'detailing'].forEach(u => {
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
 });
@@ -272,7 +288,7 @@ app.get('/api/sync/full', (req, res) => {
     SELECT t.*, u.username, u.nickname, u.avatar, u.avatar_img,
            (SELECT COUNT(*) FROM replies r WHERE r.thread_id=t.id) AS reply_count
     FROM threads t LEFT JOIN users u ON t.author_id = u.id
-    ORDER BY t.created_at DESC LIMIT 200
+    ORDER BY t.pinned DESC, t.created_at DESC LIMIT 200
   `).all();
   const threadsWithReplies = threads.map(t => {
     const replies = db.prepare(`
@@ -285,7 +301,7 @@ app.get('/api/sync/full', (req, res) => {
   const sectionPosts = db.prepare(`
     SELECT sp.*, u.username, u.nickname, u.avatar, u.avatar_img
     FROM section_posts sp LEFT JOIN users u ON sp.author_id=u.id
-    ORDER BY sp.created_at DESC LIMIT 200
+    ORDER BY sp.pinned DESC, sp.created_at DESC LIMIT 200
   `).all();
   const sectionsWithReplies = sectionPosts.map(sp => {
     const replies = db.prepare(`
@@ -307,7 +323,7 @@ app.get('/api/threads', (req, res) => {
     SELECT t.*, u.username, u.nickname, u.avatar, u.avatar_img,
            (SELECT COUNT(*) FROM replies r WHERE r.thread_id=t.id) AS reply_count
     FROM threads t LEFT JOIN users u ON t.author_id = u.id
-    WHERE t.topic LIKE ? ORDER BY ${order}
+    WHERE t.topic LIKE ? ORDER BY t.pinned DESC, ${order}
   `).all(like);
   const threadsWithReplies = rows.map(t => {
     const replies = db.prepare(`
@@ -337,9 +353,57 @@ app.post('/api/threads/:id/replies', (req, res) => {
   if (!text?.trim()) return res.json({ ok: false, error: 'Пустой ответ.' });
   if (!db.prepare('SELECT id FROM threads WHERE id=?').get(req.params.id))
     return res.json({ ok: false, error: 'Тема не найдена.' });
-  db.prepare(
+  const info = db.prepare(
     `INSERT INTO replies (thread_id, text, author_id, anonymous) VALUES (?,?,?,?)`
   ).run(req.params.id, text.trim(), req.user?.id || null, anonymous ? 1 : 0);
+  backupDb();
+  res.json({ ok: true, id: info.lastInsertRowid });
+});
+
+// ── Delete thread ────────────────────────────────────────────────
+app.delete('/api/threads/:id', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  const thread = db.prepare('SELECT * FROM threads WHERE id=?').get(req.params.id);
+  if (!thread) return res.json({ ok: false, error: 'Тема не найдена.' });
+  const canDelete = isAdmin(req.user.username) || isModerator(req.user.username) || (thread.author_id === req.user.id);
+  if (!canDelete) return res.json({ ok: false, error: 'Нет прав.' });
+  db.prepare('DELETE FROM threads WHERE id=?').run(req.params.id);
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Delete thread reply ──────────────────────────────────────────
+app.delete('/api/threads/:id/replies/:replyId', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  const reply = db.prepare('SELECT * FROM replies WHERE id=?').get(req.params.replyId);
+  if (!reply) return res.json({ ok: false, error: 'Ответ не найден.' });
+  const canDelete = isAdmin(req.user.username) || isModerator(req.user.username) || (reply.author_id === req.user.id);
+  if (!canDelete) return res.json({ ok: false, error: 'Нет прав.' });
+  db.prepare('DELETE FROM replies WHERE id=?').run(req.params.replyId);
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Pin / Unpin thread ───────────────────────────────────────────
+app.patch('/api/threads/:id/pin', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const thread = db.prepare('SELECT * FROM threads WHERE id=?').get(req.params.id);
+  if (!thread) return res.json({ ok: false, error: 'Тема не найдена.' });
+  const newVal = thread.pinned ? 0 : 1;
+  db.prepare('UPDATE threads SET pinned=? WHERE id=?').run(newVal, req.params.id);
+  backupDb();
+  res.json({ ok: true, pinned: !!newVal });
+});
+
+// ── Set thread status ────────────────────────────────────────────
+app.patch('/api/threads/:id/status', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  if (!isAdmin(req.user.username) && !isModerator(req.user.username))
+    return res.json({ ok: false, error: 'Нет доступа.' });
+  const { status } = req.body;
+  if (!['new', 'read', 'pending'].includes(status))
+    return res.json({ ok: false, error: 'Некорректный статус.' });
+  db.prepare('UPDATE threads SET status=? WHERE id=?').run(status, req.params.id);
   backupDb();
   res.json({ ok: true });
 });
@@ -385,7 +449,9 @@ app.post('/api/sections/:section/:postId/replies', (req, res) => {
 app.delete('/api/sections/:section/:postId', (req, res) => {
   const post = db.prepare('SELECT * FROM section_posts WHERE id=?').get(req.params.postId);
   if (!post) return res.json({ ok: false, error: 'Пост не найден.' });
-  if (post.author_id !== req.user?.id) return res.json({ ok: false, error: 'Только автор может удалить.' });
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  const canDelete = isAdmin(req.user.username) || isModerator(req.user.username) || (post.author_id === req.user.id);
+  if (!canDelete) return res.json({ ok: false, error: 'Нет прав.' });
   db.prepare('DELETE FROM section_posts WHERE id=?').run(req.params.postId);
   backupDb();
   res.json({ ok: true });
@@ -394,7 +460,9 @@ app.delete('/api/sections/:section/:postId', (req, res) => {
 app.delete('/api/sections/:section/:postId/replies/:replyId', (req, res) => {
   const reply = db.prepare('SELECT * FROM section_replies WHERE id=?').get(req.params.replyId);
   if (!reply) return res.json({ ok: false, error: 'Ответ не найден.' });
-  if (reply.author_id !== req.user?.id) return res.json({ ok: false, error: 'Только автор может удалить.' });
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  const canDelete = isAdmin(req.user.username) || isModerator(req.user.username) || (reply.author_id === req.user.id);
+  if (!canDelete) return res.json({ ok: false, error: 'Нет прав.' });
   db.prepare('DELETE FROM section_replies WHERE id=?').run(req.params.replyId);
   backupDb();
   res.json({ ok: true });
@@ -660,6 +728,57 @@ app.delete('/api/admin/owners/:username', (req, res) => {
     db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
   }
   backupDb();
+  res.json({ ok: true });
+});
+
+// ── Pin / Status for section posts ──────────────────────────────
+app.patch('/api/sections/:section/:postId/pin', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const post = db.prepare('SELECT * FROM section_posts WHERE id=?').get(req.params.postId);
+  if (!post) return res.json({ ok: false, error: 'Пост не найден.' });
+  const newVal = post.pinned ? 0 : 1;
+  db.prepare('UPDATE section_posts SET pinned=? WHERE id=?').run(newVal, req.params.postId);
+  backupDb();
+  res.json({ ok: true, pinned: !!newVal });
+});
+
+app.patch('/api/sections/:section/:postId/status', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username) && !isModerator(req.user.username))
+    return res.json({ ok: false, error: 'Нет доступа.' });
+  const { status } = req.body;
+  if (!['new', 'read', 'pending'].includes(status))
+    return res.json({ ok: false, error: 'Некорректный статус.' });
+  db.prepare('UPDATE section_posts SET status=? WHERE id=?').run(status, req.params.postId);
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Server-side rate limiting ────────────────────────────────────
+const RATE_LIMIT = { maxPerHour: 8, cooldownMs: 30000 };
+app.post('/api/check-rate', (req, res) => {
+  const { action } = req.body;
+  if (!action) return res.json({ ok: false });
+  const username = req.user?.username || 'anon_' + (req.ip || '0');
+  const now = new Date().toISOString();
+  const hourAgo = new Date(Date.now() - 3600000).toISOString();
+  const cooldownAgo = new Date(Date.now() - RATE_LIMIT.cooldownMs).toISOString();
+  const recent = db.prepare(
+    "SELECT COUNT(*) as c FROM rate_limits WHERE username=? AND action=? AND created_at>?"
+  ).get(username, action, hourAgo);
+  if (recent.c >= RATE_LIMIT.maxPerHour) {
+    return res.json({ ok: false, error: 'Превышен лимит. Попробуйте через час.' });
+  }
+  const lastAction = db.prepare(
+    "SELECT created_at FROM rate_limits WHERE username=? AND action=? AND created_at>? ORDER BY created_at DESC LIMIT 1"
+  ).get(username, action, cooldownAgo);
+  if (lastAction) {
+    const elapsed = Date.now() - new Date(lastAction.created_at).getTime();
+    const wait = Math.ceil((RATE_LIMIT.cooldownMs - elapsed) / 1000);
+    return res.json({ ok: false, error: `Подождите ${wait} сек.`, wait });
+  }
+  db.prepare("INSERT INTO rate_limits (username, action) VALUES (?,?)").run(username, action);
+  // Clean old entries
+  db.prepare("DELETE FROM rate_limits WHERE created_at<?").run(hourAgo);
   res.json({ ok: true });
 });
 
