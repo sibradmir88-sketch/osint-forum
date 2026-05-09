@@ -5647,7 +5647,7 @@
       if (route === "usersearch") renderUserSearchPage();
       if (route === "viewprofile") renderViewProfile(profileUsername);
       if (route === "admin") renderAdminPage();
-      if (route === "forum") { renderPasteCards(); updateForumThreadCount(); updateForumAnonUI(); }
+      if (route === "forum") { syncPastesFromServer().then(() => renderPasteCards()).catch(() => renderPasteCards()); updateForumThreadCount(); updateForumAnonUI(); }
       if (route === "thread") renderThreadPage(threadId);
       if (route === "complaints") renderComplaintsPage();
 
@@ -6697,7 +6697,7 @@
       if (route === "usersearch") renderUserSearchPage();
       if (route === "viewprofile") renderViewProfile(profileUsername);
       if (route === "admin") renderAdminPage();
-      if (route === "forum") { renderPasteCards(); updateForumThreadCount(); updateForumAnonUI(); }
+      if (route === "forum") { syncPastesFromServer().then(() => renderPasteCards()).catch(() => renderPasteCards()); updateForumThreadCount(); updateForumAnonUI(); }
       if (route === "thread") renderThreadPage(threadId);
       if (route === "complaints") renderComplaintsPage();
 
