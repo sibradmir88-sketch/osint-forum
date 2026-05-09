@@ -5620,13 +5620,15 @@
       document.getElementById("complaintDetails").value = "";
       document.getElementById("complaintError").textContent = "";
       document.getElementById("complaintSuccess").textContent = "";
-      overlay.style.display = "flex";
+      overlay.classList.add("open");
+      document.body.style.overflow = "hidden";
     }
 
     function closeComplaintModal() {
       const overlay = document.getElementById("complaintOverlay");
       if (!overlay) return;
-      overlay.style.display = "none";
+      overlay.classList.remove("open");
+      document.body.style.overflow = "";
     }
 
     function submitComplaint() {
@@ -5643,6 +5645,7 @@
       const targetTopic = overlay.dataset.targetTopic || '';
       const targetAuthor = overlay.dataset.targetAuthor || 'Аноним';
       const session = getSession();
+      if (!session) { if (errorEl) errorEl.textContent = "Авторизуйтесь, чтобы отправить жалобу"; return; }
       const complaint = {
         post_idx: targetIdx,
         post_topic: targetTopic,
@@ -5660,17 +5663,18 @@
         if (data.ok) {
           if (successEl) successEl.textContent = "✓ Жалоба отправлена модераторам";
           if (errorEl) errorEl.textContent = "";
+          // Optimistic update
+          const newComplaint = { id: "c_" + Math.random().toString(36).slice(2,10), ...complaint, status: "new", source: source, section: section, created_by: session.username || "Гость", created_at: new Date().toISOString() };
+          const complaints = getComplaints();
+          complaints.unshift(newComplaint);
+          appCache.complaints = complaints;
           setTimeout(() => closeComplaintModal(), 1100);
+        } else {
+          if (errorEl) errorEl.textContent = data.error || "Ошибка отправки.";
         }
       }).catch(() => {
-        if (errorEl) errorEl.textContent = "Ошибка отправки.";
+        if (errorEl) errorEl.textContent = "Ошибка соединения с сервером.";
       });
-      // Optimistic update
-      const newComplaint = { id: "c_" + Math.random().toString(36).slice(2,10), ...complaint, status: "new", source: source, section: section, created_by: session?.username || "Гость", created_at: new Date().toISOString() };
-      const complaints = getComplaints();
-      complaints.unshift(newComplaint);
-      appCache.complaints = complaints;
-      renderComplaintsPage();
     }
 
     function openThreadPage(idx) {
