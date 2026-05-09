@@ -5647,9 +5647,1055 @@
       if (route === "usersearch") renderUserSearchPage();
       if (route === "viewprofile") renderViewProfile(profileUsername);
       if (route === "admin") renderAdminPage();
-      if (route === "forum") { syncPastesFromServer().then(() => renderPasteCards()).catch(() => renderPasteCards()); updateForumThreadCount(); updateForumAnonUI(); }
+      if (route === "forum") { renderPasteCards(); updateForumThreadCount(); updateForumAnonUI(); }
       if (route === "thread") renderThreadPage(threadId);
       if (route === "complaints") renderComplaintsPage();
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function htmlRouteLink(route, options = {}) {
+      return `href="${buildUrl(route, options.moduleId || null, options).href}"`;
+    }
+
+    function setActiveNavLink(route) {
+      document.querySelectorAll('.nav-link').forEach(link => link.classList.toggle('active', link.dataset.route === route));
+    }
+
+    function initSpaLinks() {
+      // Делегирование: работает и для динамически добавленных элементов (например, dropdown после логина).
+      document.addEventListener("click", (e) => {
+        const link = e.target.closest("[data-route]");
+        if (!link) return;
+        const route = link.dataset.route;
+        if (!route) return;
+        e.preventDefault();
+        navigateTo(route, { threadId: route === "thread" ? parseInt(link.dataset.threadId, 10) : undefined });
+      });
+    }
+
+    function updateNavForUser() {
+      const session = getSession();
+      const container = document.getElementById("authNavContainer");
+      const adminLink = document.getElementById("navAdminLink");
+      if (adminLink) adminLink.style.display = (session && isAdmin(session.username)) ? "" : "none";
+      if (!container) return;
+
+      const showComplaints = session && isModeratorOrAdmin(session.username);
+      document.getElementById('navComplaintsLink')?.style.setProperty('display', showComplaints ? '' : 'none');
+      document.getElementById('cardComplaints')?.style.setProperty('display', showComplaints ? 'block' : 'none');
+
+      if (session) {
+        const profile = getUserProfile(session.username) || {};
+        const tags = profile.activeTags || ["BEGINNER"];
+        const tagsHtml = tags.slice(0,3).map(t => {
+          const info = ALL_TAGS[t];
+          return info ? `<span style="font-size:0.6rem;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1px 6px;color:${info.color};">${info.emoji} ${t}</span>` : "";
+        }).join("");
+        container.innerHTML = `
+          <div class="nav-user-btn" id="navUserBtn" onclick="toggleUserDropdown(event)">
+            <div class="nav-user-avatar" style="${_getNavAvatarStyle(session)}">${_getNavAvatarContent(session)}</div>
+            <span>${escapeHtml(session.username)}</span>
+            <i class="fa-solid fa-chevron-down" style="font-size:0.72rem;color:var(--text-muted);"></i>
+            <div class="nav-user-dropdown">
+              <div class="nav-dropdown-item" style="pointer-events:none;opacity:0.55;font-size:0.82rem;">
+                <i class="fa-solid fa-circle-user"></i> ${escapeHtml(session.username)}
+              </div>
+              ${tagsHtml ? `<div style="padding:4px 14px;display:flex;flex-wrap:wrap;gap:4px;">${tagsHtml}</div>` : ""}
+              <div class="nav-dropdown-separator"></div>
+              <button type="button" class="nav-dropdown-item" data-nav-route="profile">
+                <i class="fa-solid fa-circle-user"></i> Мой профиль
+              </button>
+              <button type="button" class="nav-dropdown-item" data-nav-route="usersearch">
+                <i class="fa-solid fa-magnifying-glass"></i> Поиск людей
+              </button>
+              ${isAdmin(session.username) ? `<button type="button" class="nav-dropdown-item" style="color:#ff4444;" data-nav-route="admin"><i class="fa-solid fa-shield-halved"></i> Панель Admin</button>` : ""}
+              <div class="nav-dropdown-separator"></div>
+              <button class="nav-dropdown-item danger" onclick="doLogout()">
+                <i class="fa-solid fa-right-from-bracket"></i> Выйти
+              </button>
+            </div>
+          </div>`;
+      } else {
+        container.innerHTML = `
+          <button class="nav-auth-btn" onclick="openAuthModal('login')">
+            <i class="fa-solid fa-right-to-bracket"></i> Войти
+          </button>`;
+      }
+      updatePostForms();
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       PROFILE SYSTEM
+    ═══════════════════════════════════════════════════════════ */
+    const AVATAR_COLORS = [
+      "linear-gradient(135deg,#7c3aed,#a855f7)",
+      "linear-gradient(135deg,#2563eb,#7c3aed)",
+      "linear-gradient(135deg,#059669,#10b981)",
+      "linear-gradient(135deg,#dc2626,#f87171)",
+      "linear-gradient(135deg,#d97706,#fbbf24)",
+      "linear-gradient(135deg,#0891b2,#22d3ee)",
+      "linear-gradient(135deg,#be185d,#ec4899)",
+      "linear-gradient(135deg,#65a30d,#a3e635)",
+    ];
+    const AVATAR_EMOJIS = ["🦊","🐺","🐉","🦅","🐈","👾","🤖","💀","🔮","⚡","🌙","🔥","🎭","🦁","🐧","🦋"];
+
+    function getUserProfile(username) {
+      const users = getUsers();
+      return users[username.toLowerCase()] || null;
+    }
+
+    function saveUserProfile(username, profileData) {
+      const users = getUsers();
+      const key = username.toLowerCase();
+      if (!users[key]) return;
+      users[key] = { ...users[key], ...profileData };
+      saveUsers(users);
+      // Update session if it's current user
+      const session = getSession();
+      if (session && session.username.toLowerCase() === key) {
+        saveSession({ ...session, ...profileData, username: users[key].username });
+        updateNavForUser();
+      }
+    }
+
+    /* ── Render My Profile Page ─────────────────────────────── */
+    function renderProfilePage() {
+      const session = getSession();
+      const container = document.getElementById("profilePageContent");
+      if (!container) return;
+      if (!session) {
+        container.innerHTML = `<div style="text-align:center;padding:60px 0;">
+          <div style="font-size:3rem;margin-bottom:16px;">🔒</div>
+          <h2 style="margin-bottom:12px;">Войдите в аккаунт</h2>
+          <p style="color:var(--text-muted);margin-bottom:24px;">Чтобы просмотреть свой профиль, необходимо авторизоваться.</p>
+          <button class="auth-submit-btn" style="width:auto;padding:12px 32px;" onclick="openAuthModal('login')">
+            <i class="fa-solid fa-right-to-bracket"></i> Войти
+          </button></div>`;
+        return;
+      }
+
+      const profile = getUserProfile(session.username) || {};
+      const nickname  = profile.nickname  || profile.username || session.username;
+      const username  = profile.username  || session.username;
+      const bio       = profile.bio       || "";
+      const avatarBg  = profile.avatarColor || AVATAR_COLORS[0];
+      const avatarEmoji = profile.avatarEmoji || "";
+      const avatarImg = profile.avatarImg  || "";
+      const joined    = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString("ru-RU",{year:"numeric",month:"long",day:"numeric"}) : "";
+
+      const avatarHtml = avatarImg
+        ? `<img src="${avatarImg}" alt="avatar"/>`
+        : (avatarEmoji
+            ? `<span style="font-size:2.6rem;">${avatarEmoji}</span>`
+            : `<span>${escapeHtml(nickname[0].toUpperCase())}</span>`);
+      const avatarStyle = avatarImg ? "" : `background:${avatarBg};`;
+
+      container.innerHTML = `
+        <h1 style="font-size:clamp(1.6rem,3.5vw,2.4rem);margin-bottom:24px;">
+          <i class="fa-solid fa-circle-user" style="color:#c4b5fd;margin-right:10px;"></i>Мой профиль
+        </h1>
+        <div class="profile-wrap">
+          <div class="profile-sidebar">
+            <div class="profile-avatar-wrap" onclick="document.getElementById('avatarFileInput').click()">
+              <div class="profile-avatar-big" id="profileAvatarPreview" style="${avatarStyle}">${avatarHtml}</div>
+              <div class="profile-avatar-overlay"><i class="fa-solid fa-camera"></i></div>
+            </div>
+            <input type="file" id="avatarFileInput" accept="image/*" onchange="handleAvatarUpload(event)" />
+            <div class="profile-username-display">
+              <div class="profile-nickname">${escapeHtml(nickname)}</div>
+              <div class="profile-username-tag">@${escapeHtml(username)}</div>
+              ${renderUserTagsHtml(profile)}
+            </div>
+            ${joined ? `<div class="profile-joined"><i class="fa-regular fa-calendar" style="margin-right:5px;"></i>С нами с ${joined}</div>` : ""}
+            <div class="profile-sidebar-actions">
+              <button class="profile-sidebar-btn" onclick="navigateTo('usersearch')">
+                <i class="fa-solid fa-magnifying-glass"></i> Поиск пользователей
+              </button>
+              <button class="profile-sidebar-btn danger" onclick="doLogout();navigateTo('home');">
+                <i class="fa-solid fa-right-from-bracket"></i> Выйти из аккаунта
+              </button>
+            </div>
+          </div>
+
+          <div class="profile-main">
+            <!-- Avatar customization -->
+            <div class="profile-card">
+              <h3><i class="fa-solid fa-palette"></i> Аватар</h3>
+              <div class="avatar-type-tabs">
+                <button class="avatar-type-tab active" id="avatarTabColor" onclick="switchAvatarTab('color')">Цвет</button>
+                <button class="avatar-type-tab" id="avatarTabEmoji" onclick="switchAvatarTab('emoji')">Эмодзи</button>
+                <button class="avatar-type-tab" id="avatarTabImage" onclick="switchAvatarTab('image')">Фото</button>
+              </div>
+              <div id="avatarTabColorPanel">
+                <p style="color:var(--text-muted);font-size:0.88rem;margin-bottom:10px;">Выберите цвет фона аватара:</p>
+                <div class="avatar-color-grid">
+                  ${AVATAR_COLORS.map((c,i) => `<div class="avatar-color-swatch ${avatarBg===c&&!avatarEmoji&&!avatarImg?'selected':''}" style="background:${c};" onclick="selectAvatarColor('${c}')"></div>`).join("")}
+                </div>
+              </div>
+              <div id="avatarTabEmojiPanel" style="display:none;">
+                <p style="color:var(--text-muted);font-size:0.88rem;margin-bottom:10px;">Выберите эмодзи как аватар:</p>
+                <div class="avatar-emoji-grid">
+                  ${AVATAR_EMOJIS.map(e => `<button class="avatar-emoji-btn ${avatarEmoji===e?'selected':''}" onclick="selectAvatarEmoji('${e}')">${e}</button>`).join("")}
+                </div>
+              </div>
+              <div id="avatarTabImagePanel" style="display:none;">
+                <p style="color:var(--text-muted);font-size:0.88rem;margin-bottom:12px;">Загрузите своё фото (макс. 2 МБ, JPG/PNG):</p>
+                <button class="profile-sidebar-btn" onclick="document.getElementById('avatarFileInput').click()" style="justify-content:flex-start;">
+                  <i class="fa-solid fa-upload"></i> Выбрать файл
+                </button>
+                ${avatarImg ? `<button class="profile-sidebar-btn danger" style="margin-top:8px;justify-content:flex-start;" onclick="removeAvatarImage()"><i class="fa-solid fa-trash"></i> Удалить фото</button>` : ""}
+              </div>
+            </div>
+
+            <!-- Identity -->
+            <div class="profile-card">
+              <h3><i class="fa-solid fa-id-card"></i> Идентичность</h3>
+              <div class="profile-field">
+                <label>Никнейм (отображаемое имя)</label>
+                <input type="text" id="pfNickname" value="${escapeHtml(nickname)}" maxlength="32" placeholder="Как вас видят другие" />
+                <div class="field-hint">Видно всем пользователям</div>
+              </div>
+              <div class="profile-field">
+                <label>Юзернейм (для поиска)</label>
+                <div style="display:flex;align-items:center;gap:0;">
+                  <span style="padding:11px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(139,92,246,0.28);border-right:none;border-radius:10px 0 0 10px;color:var(--text-muted);font-size:0.95rem;">@</span>
+                  <input type="text" id="pfUsername" value="${escapeHtml(username)}" maxlength="32" placeholder="username" style="border-radius:0 10px 10px 0;" />
+                </div>
+                <div class="field-hint">Уникальный тег, по которому вас можно найти. Только буквы, цифры, _ и -</div>
+              </div>
+              <button class="profile-save-btn" onclick="saveIdentity()">
+                <i class="fa-solid fa-floppy-disk"></i> Сохранить
+              </button>
+              <span class="profile-saved-msg" id="identitySavedMsg">✓ Сохранено!</span>
+            </div>
+
+            <!-- Bio -->
+            <div class="profile-card">
+              <h3><i class="fa-solid fa-align-left"></i> О себе</h3>
+              <div class="profile-field">
+                <label>Описание профиля</label>
+                <textarea id="pfBio" maxlength="300" placeholder="Расскажите о себе...">${escapeHtml(bio)}</textarea>
+                <div class="field-hint">Максимум 300 символов</div>
+              </div>
+              <button class="profile-save-btn" onclick="saveBio()">
+                <i class="fa-solid fa-floppy-disk"></i> Сохранить
+              </button>
+              <span class="profile-saved-msg" id="bioSavedMsg">✓ Сохранено!</span>
+            </div>
+
+            <!-- Security -->
+            <div class="profile-card">
+              <h3><i class="fa-solid fa-lock"></i> Безопасность</h3>
+              <div class="profile-field">
+                <label>Текущий пароль</label>
+                <input type="password" id="pfCurrentPw" placeholder="Введите текущий пароль" />
+              </div>
+              <div class="profile-field">
+                <label>Новый пароль</label>
+                <input type="password" id="pfNewPw" placeholder="Минимум 6 символов" />
+              </div>
+              <div class="profile-field">
+                <label>Повторите новый пароль</label>
+                <input type="password" id="pfNewPw2" placeholder="Повторите новый пароль" />
+              </div>
+              <button class="profile-save-btn" onclick="changePassword()">
+                <i class="fa-solid fa-key"></i> Сменить пароль
+              </button>
+              <span class="profile-saved-msg" id="pwSavedMsg"></span>
+            </div>
+
+            <!-- Tags selector -->
+            <div class="profile-card">
+              <h3><i class="fa-solid fa-tags" style="color:#e040fb;"></i> Теги профиля</h3>
+              <p style="color:var(--text-muted);font-size:0.88rem;margin-bottom:4px;">Выбери любые теги — отображаются рядом с именем. Можно надеть хоть все сразу.</p>
+              <div class="tags-selector-grid" id="tagsGrid" data-server-tags='${escapeHtml(JSON.stringify(profile.activeTags || ["BEGINNER"]))}'>
+                ${Object.entries(ALL_TAGS).filter(([tag]) => {
+                  if (tag === "ADMIN" && !isAdmin(username)) return false;
+                  if (tag === "MODERATOR" && !isModeratorOrAdmin(username)) return false;
+                  if (tag === "OWNER" && !isOwner(username) && !isAdmin(username)) return false;
+                  return true;
+                }).map(([tag, info]) => {
+                  const isAdminTag = tag === "ADMIN";
+                  const isModeratorTag = tag === "MODERATOR";
+                  const isOwnerTag = tag === "OWNER";
+                  const isOsinterTag = tag === "OSINT'ER";
+                  const forumDone = hasPostedOnForum(username);
+                  const lockReason = isAdminTag || isModeratorTag || isOwnerTag ? !canToggleTag(tag, username) : (isOsinterTag && !forumDone);
+                  const locked = Boolean(lockReason);
+                  const active = (profile.activeTags || ["BEGINNER"]).includes(tag);
+                  const activeStyle = active
+                    ? `border-color:${info.color};opacity:1;box-shadow:0 0 8px ${info.color}55;`
+                    : `border-color:rgba(255,255,255,0.08);opacity:0.6;`;
+                  const specialStyle = isAdminTag
+                    ? `background:linear-gradient(135deg,#1a0000,#3d0000)!important;color:#ff2222!important;border-color:rgba(255,30,30,0.7)!important;box-shadow:0 0 14px rgba(255,0,0,0.5)!important;text-shadow:0 0 6px rgba(255,0,0,0.8)!important;font-weight:700;opacity:1!important;`
+                    : isModeratorTag
+                      ? `background:linear-gradient(135deg,#312e81,#7c3aed)!important;color:#d8b4fe!important;border-color:rgba(139,92,246,0.75)!important;box-shadow:0 0 10px rgba(124,58,237,0.4)!important;`
+                      : isOwnerTag
+                        ? `background:linear-gradient(135deg,#f97316,#facc15)!important;color:#171717!important;border-color:rgba(251,191,36,0.8)!important;box-shadow:0 0 10px rgba(251,191,36,0.4)!important;`
+                        : "";
+                  const lockedStyle = locked && !isAdminTag ? "opacity:0.45;cursor:not-allowed;" : "";
+                  return `<button
+                    class="tag-select-btn${active ? " selected" : ""}${locked ? " locked" : ""}"
+                    data-tag-btn="1"
+                    data-tag="${escapeHtml(tag)}"
+                    data-locked="${locked ? "1" : "0"}"
+                    data-username="${escapeHtml(username)}"
+                    style="color:${info.color};${activeStyle}${specialStyle}${lockedStyle}"
+                    title="${info.desc}"
+                    onclick="handleTagClick(event, this)">
+                    ${info.emoji} ${tag}${locked && !isAdminTag ? " 🔒" : ""}
+                  </button>`;
+                }).join("")}
+              </div>
+              ${!hasPostedOnForum(username) ? `<div class="tag-locked-hint">🔒 OSINT'ER — напиши первое сообщение на форуме чтобы разблокировать</div>` : ""}
+              ${isAdmin(username) ? `<div class="tag-locked-hint" style="color:#ff4444;text-shadow:0 0 6px rgba(255,0,0,0.4);">⚡ Тег ADMIN можно снять/надеть вручную</div>` : ""}
+              <button class="profile-save-btn" style="margin-top:14px;" onclick="saveTagsSelection('${username}')">
+                <i class="fa-solid fa-floppy-disk"></i> Сохранить теги
+              </button>
+              <span class="profile-saved-msg" id="tagsSavedMsg">✓ Теги сохранены!</span>
+            </div>
+
+            ${isAdmin(username) ? `
+            <div class="profile-card" style="border-color:rgba(255,68,68,0.3);">
+              <h3 style="color:#ff4444;"><i class="fa-solid fa-shield-halved"></i> Панель администратора</h3>
+              <button class="profile-save-btn" style="background:linear-gradient(135deg,#dc2626,#ef4444);margin-top:8px;" onclick="navigateTo('admin')">
+                <i class="fa-solid fa-gear"></i> Открыть панель
+              </button>
+            </div>` : ""}
+          </div>
+        </div>`;
+    }
+
+    /* ── Avatar actions ──────────────────────────────────────── */
+    /* ── Tag selection ───────────────────────────────────────── */
+    let _pendingTags = null;
+
+    function handleTagClick(e, btn) {
+      if (btn.dataset.locked === "1") {
+        btn.style.animation = "none";
+        btn.offsetHeight;
+        btn.style.animation = "";
+        const origText = btn.innerHTML;
+        btn.innerHTML = "🔒 Нужен пост на форуме!";
+        setTimeout(() => { btn.innerHTML = origText; }, 1200);
+        return;
+      }
+      const tag = btn.dataset.tag;
+      const username = btn.dataset.username;
+      if (!tag || !username) return;
+      toggleTag(tag, btn, username);
+    }
+
+    function toggleTag(tag, btn, username) {
+      if (_pendingTags === null) {
+        const grid = document.getElementById("tagsGrid");
+        if (grid && grid.dataset.serverTags) {
+          try { _pendingTags = JSON.parse(grid.dataset.serverTags); } catch(e) { _pendingTags = ["BEGINNER"]; }
+        } else {
+          _pendingTags = ["BEGINNER"];
+        }
+      }
+      const info = ALL_TAGS[tag];
+      if (!info) return;
+      const idx = _pendingTags.indexOf(tag);
+      if (idx === -1) {
+        _pendingTags.push(tag);
+        btn.classList.add("selected");
+        btn.style.borderColor = info.color;
+        btn.style.opacity = "1";
+        btn.style.boxShadow = `0 0 8px ${info.color}55`;
+      } else {
+        _pendingTags.splice(idx, 1);
+        btn.classList.remove("selected");
+        btn.style.borderColor = "rgba(255,255,255,0.08)";
+        btn.style.opacity = "0.6";
+        btn.style.boxShadow = "";
+      }
+    }
+
+    // Keep old name as alias for any leftover references
+    function toggleTagSelection(tag, btn, username) { toggleTag(tag, btn, username); }
+
+    function saveTagsSelection(username) {
+      if (_pendingTags !== null) {
+        _pendingTags = ensureSpecialTags(username, _pendingTags);
+        saveUserTags(username, _pendingTags);
+        _pendingTags = null;
+      }
+      showProfileMsg("tagsSavedMsg", "✓ Теги сохранены!", false);
+      updateNavForUser();
+    }
+
+    function showTagLocked(btn) {
+      const orig = btn.textContent;
+      btn.textContent = "🔒 Не разблокировано!";
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    }
+
+    /* ── Admin panel ─────────────────────────────────────────── */
+    function renderAdminPage(activeTab) {
+      const session = getSession();
+      const container = document.getElementById("adminPageContent");
+      if (!container) return;
+
+      if (!session || !isAdmin(session.username)) {
+        container.innerHTML = `<div style="text-align:center;padding:80px 0;">
+          <div style="font-size:3rem;margin-bottom:16px;">⛔</div>
+          <h2>Доступ запрещён</h2>
+          <p style="color:var(--text-muted);margin-top:12px;">Только администраторы могут просматривать эту страницу.</p>
+        </div>`;
+        return;
+      }
+
+      activeTab = activeTab || "users";
+      const admins = getAdmins();
+      const users = getUsers();
+      const userList = Object.values(users);
+      const pastes = JSON.parse(localStorage.getItem("osint_pastes_v1") || "[]");
+      const svcQ  = getSavedQuestions("services");
+      const modQ  = getSavedQuestions("moderators");
+      const bannedUsers = getBannedUsers();
+
+      // ── stats ──
+      const statsHtml = `<div class="admin-stats-grid">
+        <div class="admin-stat-card"><div class="admin-stat-num">${userList.length}</div><div class="admin-stat-label">Пользователей</div></div>
+        <div class="admin-stat-card"><div class="admin-stat-num">${admins.length}</div><div class="admin-stat-label">Администраторов</div></div>
+        <div class="admin-stat-card"><div class="admin-stat-num">${pastes.length}</div><div class="admin-stat-label">Постов форума</div></div>
+        <div class="admin-stat-card"><div class="admin-stat-num">${svcQ.length + modQ.length}</div><div class="admin-stat-label">Обращений</div></div>
+        <div class="admin-stat-card"><div class="admin-stat-num">${bannedUsers.length}</div><div class="admin-stat-label" style="color:#fca5a5;">Заблокировано</div></div>
+      </div>`;
+
+      // ── tabs ──
+      const tabs = [
+        { id:"users",      icon:"fa-users",        label:"Пользователи" },
+        { id:"admins",     icon:"fa-crown",        label:"Администраторы" },
+        { id:"roles",      icon:"fa-user-shield",  label:"Модерация" },
+        { id:"forum",      icon:"fa-comments",     label:"Форум" },
+        { id:"services",   icon:"fa-briefcase",    label:"Услуги и фриланс" },
+        { id:"moderators", icon:"fa-shield-halved",label:"Вопросы к мод." },
+        { id:"complaints", icon:"fa-flag",         label:"Жалобы" },
+      ];
+      const tabsHtml = `<div class="admin-tabs">${tabs.map(t =>
+        `<button class="admin-tab${activeTab===t.id?" active":""}" onclick="renderAdminPage('${t.id}')">
+          <i class="fa-solid ${t.icon}" style="margin-right:5px;"></i>${t.label}
+        </button>`).join("")}</div>`;
+
+      // ── USERS tab ──
+      function renderUsersTab() {
+        return `<div class="profile-card">
+          <div class="admin-section-title"><i class="fa-solid fa-users"></i> Все пользователи (${userList.length})</div>
+          <div style="max-height:520px;overflow-y:auto;display:grid;gap:8px;">
+            ${userList.length === 0 ? `<p style="color:var(--text-muted);">Пока нет пользователей</p>` :
+              userList.map(u => {
+                const adm = isAdmin(u.username);
+                const banned = bannedUsers.includes(u.username.toLowerCase());
+                return `<div class="admin-user-row" style="${banned?"opacity:0.7;border-color:rgba(220,38,38,0.35);":""}">
+                  <div style="width:38px;height:38px;border-radius:50%;background:${u.avatarColor||"linear-gradient(135deg,#7c3aed,#a855f7)"};display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:1rem;">${escapeHtml((u.nickname||u.username)[0].toUpperCase())}</div>
+                  <div class="admin-user-name">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                      <span style="font-weight:700;">@${escapeHtml(u.username)}</span>
+                      ${adm ? `<span class="utag utag-ADMIN" style="font-size:0.58rem;padding:1px 6px;">ADMIN</span>` : ""}
+                      ${banned ? `<span class="banned-badge">⛔ БАН</span>` : ""}
+                    </div>
+                    <div style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(u.nickname||"")} · ${new Date(u.createdAt).toLocaleDateString("ru-RU")}</div>
+                  </div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    ${!adm ? `<button class="admin-btn info" style="font-size:0.75rem;padding:5px 11px;" onclick="makeAdmin('${escapeHtml(u.username)}')"><i class="fa-solid fa-crown"></i> Admin</button>` : ""}
+                    ${!banned
+                      ? `<button class="admin-btn ban" style="font-size:0.75rem;padding:5px 11px;" onclick="banUser('${escapeHtml(u.username)}')"><i class="fa-solid fa-ban"></i> Бан</button>`
+                      : `<button class="admin-btn unban" style="font-size:0.75rem;padding:5px 11px;" onclick="unbanUser('${escapeHtml(u.username)}')"><i class="fa-solid fa-rotate-left"></i> Разбан</button>`
+                    }
+                  </div>
+                </div>`;
+              }).join("")
+            }
+          </div>
+        </div>`;
+      }
+
+      // ── ADMINS tab ──
+      function renderAdminsTab() {
+        return `<div class="profile-card" style="border-color:rgba(255,68,68,0.3);">
+          <div class="admin-section-title"><i class="fa-solid fa-crown"></i> Администраторы</div>
+          <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Администратор получает тег [ADMIN] и доступ к этой панели.</p>
+          <div id="adminList" style="display:grid;gap:8px;">
+            ${admins.map(a => `
+              <div class="admin-user-row">
+                <span class="utag utag-ADMIN">ADMIN</span>
+                <span class="admin-user-name">@${escapeHtml(a)}</span>
+                ${a.toLowerCase() !== session.username.toLowerCase()
+                  ? `<button class="admin-btn danger" onclick="removeAdmin('${escapeHtml(a)}')"><i class="fa-solid fa-trash"></i> Удалить</button>`
+                  : `<span style="color:var(--text-muted);font-size:0.8rem;">(вы)</span>`}
+              </div>`).join("")}
+          </div>
+          <div class="admin-add-row">
+            <input type="text" id="newAdminInput" placeholder="@username нового администратора" />
+            <button class="admin-btn" onclick="addAdmin()"><i class="fa-solid fa-plus"></i> Добавить</button>
+          </div>
+          <p id="adminActionMsg" style="font-size:0.85rem;margin-top:10px;"></p>
+        </div>`;
+      }
+
+      function renderRolesTab() {
+        const moderators = getModerators();
+        const owners = getOwners();
+        return `<div class="profile-card" style="border-color:rgba(59,130,246,0.3);">
+          <div class="admin-section-title"><i class="fa-solid fa-user-shield"></i> Модерация</div>
+          <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Здесь можно назначать и снимать модераторов, а также управлять владельцами.</p>
+          <div style="display:grid;gap:12px;">
+            <div style="display:grid;gap:8px;">
+              <div style="font-weight:700;">Модераторы</div>
+              ${moderators.length ? moderators.map(u => `<div class="admin-user-row"><span class="utag utag-MODERATOR">MODERATOR</span><span class="admin-user-name">@${escapeHtml(u)}</span><button class="admin-btn danger" onclick="removeModerator('${escapeHtml(u)}')"><i class="fa-solid fa-trash"></i> Убрать</button></div>`).join("") : `<div style="color:var(--text-muted);">Пока нет модераторов.</div>`}
+              <div class="admin-add-row">
+                <input type="text" id="newModeratorInput" placeholder="@username модератора" />
+                <button class="admin-btn" onclick="addModerator()"><i class="fa-solid fa-plus"></i> Добавить</button>
+              </div>
+            </div>
+            <div style="display:grid;gap:8px;">
+              <div style="font-weight:700;">Владельцы</div>
+              ${owners.length ? owners.map(u => `<div class="admin-user-row"><span class="utag utag-OWNER">OWNER</span><span class="admin-user-name">@${escapeHtml(u)}</span><button class="admin-btn danger" onclick="removeOwner('${escapeHtml(u)}')"><i class="fa-solid fa-trash"></i> Убрать</button></div>`).join("") : `<div style="color:var(--text-muted);">Пока нет владельцев.</div>`}
+              <div class="admin-add-row">
+                <input type="text" id="newOwnerInput" placeholder="@username владельца" />
+                <button class="admin-btn" onclick="addOwner()"><i class="fa-solid fa-plus"></i> Добавить</button>
+              </div>
+            </div>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;margin-top:12px;">Модераторы получают тег [MODERATOR], владельцы — [OWNER].</p>
+        </div>`;
+      }
+
+      function renderComplaintsTab() {
+        const complaints = getComplaints();
+        if (!complaints.length) return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы</div><div class="mod-empty"><i class="fa-regular fa-folder-open" style="font-size:2rem;margin-bottom:12px;display:block;"></i>Нет жалоб.</div></div>`;
+        return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы (${complaints.length})</div><div style="display:grid;gap:10px;">${complaints.map(c => `<div class="mod-post-card status-${c.status}"><div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='pending'?'На рассмотрении':'Решено'}</span></div><div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}${c.details?`<div style="margin-top:10px;">${escapeHtml(c.details)}</div>`:''}</div><div class="mod-post-actions"><button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Взять в работу</button><button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button><button class="admin-btn danger" onclick="resolveComplaint('${c.id}')"><i class="fa-solid fa-check"></i> Решено</button><button class="admin-btn info" onclick="navigateTo('thread',{threadId:${c.postIdx}})"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть тему</button></div></div>`).join('')}</div></div>`;
+      }
+
+      // ── MODERATION tab (forum / services / moderators) ──
+      function renderModerationTab(type) {
+        let items, titleIcon, titleText, storageKey;
+        if (type === "forum") {
+          items = pastes.map((p, i) => ({ idx: i, author: p.author || "Аноним", text: p.topic + "\n" + p.text, date: p.date, status: p._status || "new", source: "forum" }));
+          titleIcon = "fa-comments"; titleText = "Посты на форуме";
+        } else if (type === "services") {
+          items = svcQ.map((q, i) => ({ idx: i, author: q.author || "Аноним", text: q.text, date: q.date, status: q._status || "new", source: "services" }));
+          titleIcon = "fa-briefcase"; titleText = "Услуги и фриланс";
+        } else {
+          items = modQ.map((q, i) => ({ idx: i, author: q.author || "Аноним", text: q.text, date: q.date, status: q._status || "new", source: "moderators" }));
+          titleIcon = "fa-shield-halved"; titleText = "Вопросы к модераторам";
+        }
+
+        if (!items.length) return `<div class="profile-card"><div class="admin-section-title"><i class="fa-solid ${titleIcon}"></i> ${titleText}</div><div class="mod-empty"><i class="fa-regular fa-folder-open" style="font-size:2rem;margin-bottom:12px;display:block;"></i>Нет сообщений</div></div>`;
+
+        const badges = { new:"new", read:"read", pending:"pending" };
+        const labelsStatus = { new:"Новое", read:"Прочитано", pending:"На рассмотрении" };
+
+        return `<div class="profile-card">
+          <div class="admin-section-title"><i class="fa-solid ${titleIcon}"></i> ${titleText} <span style="color:var(--text-muted);font-weight:400;font-size:0.9rem;">(${items.length})</span></div>
+          <div style="display:grid;gap:10px;">
+            ${items.map(item => `
+              <div class="mod-post-card status-${item.status}" id="modcard-${item.source}-${item.idx}">
+                <div class="mod-post-meta">
+                  <span class="mod-post-author">@${escapeHtml(item.author)}</span>
+                  <span class="mod-post-date">${new Date(item.date).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                  <span class="mod-status-badge ${item.status}">${labelsStatus[item.status]||"Новое"}</span>
+                </div>
+                <div class="mod-post-text">${escapeHtml(item.text.slice(0,320))}${item.text.length>320?"…":""}</div>
+                <div class="mod-post-actions">
+                  <button class="admin-btn ok" onclick="modSetStatus('${item.source}',${item.idx},'read')"><i class="fa-solid fa-eye"></i> Прочитано</button>
+                  <button class="admin-btn warn" onclick="modSetStatus('${item.source}',${item.idx},'pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button>
+                  <button class="admin-btn danger" onclick="modDeletePost('${item.source}',${item.idx})"><i class="fa-solid fa-trash-can"></i> Удалить</button>
+                  ${item.author && item.author !== "Аноним" ? `<button class="admin-btn ban" onclick="banUser('${escapeHtml(item.author)}')"><i class="fa-solid fa-ban"></i> Бан @${escapeHtml(item.author)}</button>` : ""}
+                </div>
+              </div>`).join("")}
+          </div>
+        </div>`;
+      }
+
+      let tabContent = "";
+      if (activeTab === "users")      tabContent = renderUsersTab();
+      else if (activeTab === "admins") tabContent = renderAdminsTab();
+      else if (activeTab === "roles")  tabContent = renderRolesTab();
+      else if (activeTab === "complaints") tabContent = renderComplaintsTab();
+      else                             tabContent = renderModerationTab(activeTab);
+
+      container.innerHTML = `
+        <h1 style="font-size:clamp(1.6rem,3.5vw,2.2rem);margin-bottom:8px;color:#ff4444;text-shadow:0 0 20px rgba(255,50,50,0.3);">
+          <i class="fa-solid fa-shield-halved"></i> Панель администратора
+        </h1>
+        <p style="color:var(--text-muted);margin-bottom:22px;">Управление OSINT Forum · Доступ: @${escapeHtml(session.username)}</p>
+        <div class="admin-panel-wrap">
+          ${statsHtml}
+          ${tabsHtml}
+          ${tabContent}
+        </div>`;
+    }
+
+    function addAdmin() {
+      const inp = document.getElementById("newAdminInput");
+      const val = (inp.value || "").trim().replace(/^@/,"").toLowerCase();
+      const msg = document.getElementById("adminActionMsg");
+      if (!val) { msg.textContent = "Введите юзернейм."; msg.style.color="#fca5a5"; return; }
+      const admins = getAdmins();
+      if (admins.map(a=>a.toLowerCase()).includes(val)) { msg.textContent = "@"+val+" уже администратор."; msg.style.color="#fca5a5"; return; }
+      admins.push(val);
+      saveAdmins(admins);
+      // Give ADMIN tag if user exists
+      const users = getUsers();
+      if (users[val]) {
+        const tags = users[val].activeTags || ["BEGINNER"];
+        if (!tags.includes("ADMIN")) tags.push("ADMIN");
+        users[val].activeTags = tags;
+        saveUsers(users);
+      }
+      inp.value = "";
+      msg.textContent = "✓ @"+val+" назначен администратором!"; msg.style.color="#86efac";
+      renderAdminPage("admins");
+    }
+
+    function removeAdmin(username) {
+      const admins = getAdmins().filter(a => a.toLowerCase() !== username.toLowerCase());
+      saveAdmins(admins);
+      // Remove ADMIN tag
+      const users = getUsers();
+      const key = username.toLowerCase();
+      if (users[key]) {
+        users[key].activeTags = (users[key].activeTags || []).filter(t => t !== "ADMIN");
+        saveUsers(users);
+      }
+      renderAdminPage("admins");
+    }
+
+    function makeAdmin(username) {
+      const admins = getAdmins();
+      if (!admins.map(a=>a.toLowerCase()).includes(username.toLowerCase())) {
+        admins.push(username.toLowerCase());
+        saveAdmins(admins);
+        const users = getUsers();
+        if (users[username.toLowerCase()]) {
+          const tags = users[username.toLowerCase()].activeTags || ["BEGINNER"];
+          if (!tags.includes("ADMIN")) tags.push("ADMIN");
+          users[username.toLowerCase()].activeTags = tags;
+          saveUsers(users);
+        }
+      }
+      renderAdminPage("users");
+    }
+
+    function addModerator() {
+      const inp = document.getElementById("newModeratorInput");
+      const val = (inp.value || "").trim().replace(/^@/,"").toLowerCase();
+      if (!val) return;
+      const mods = getModerators();
+      if (mods.map(u => u.toLowerCase()).includes(val)) return;
+      mods.push(val);
+      saveModerators(mods);
+      const users = getUsers();
+      if (users[val]) {
+        users[val].activeTags = ensureSpecialTags(val, users[val].activeTags || ["BEGINNER"]);
+        if (!users[val].activeTags.includes("MODERATOR")) users[val].activeTags.push("MODERATOR");
+        saveUsers(users);
+      }
+      inp.value = "";
+      renderAdminPage("roles");
+    }
+
+    function removeModerator(username) {
+      const mods = getModerators().filter(u => u.toLowerCase() !== username.toLowerCase());
+      saveModerators(mods);
+      const users = getUsers();
+      const key = username.toLowerCase();
+      if (users[key]) {
+        users[key].activeTags = (users[key].activeTags || []).filter(t => t !== "MODERATOR");
+        saveUsers(users);
+      }
+      renderAdminPage("roles");
+    }
+
+    function addOwner() {
+      const inp = document.getElementById("newOwnerInput");
+      const val = (inp.value || "").trim().replace(/^@/,"").toLowerCase();
+      if (!val) return;
+      const owners = getOwners();
+      if (owners.map(u => u.toLowerCase()).includes(val)) return;
+      owners.push(val);
+      saveOwners(owners);
+      const users = getUsers();
+      if (users[val]) {
+        users[val].activeTags = ensureSpecialTags(val, users[val].activeTags || ["BEGINNER"]);
+        if (!users[val].activeTags.includes("OWNER")) users[val].activeTags.push("OWNER");
+        saveUsers(users);
+      }
+      inp.value = "";
+      renderAdminPage("roles");
+    }
+
+    function removeOwner(username) {
+      const owners = getOwners().filter(u => u.toLowerCase() !== username.toLowerCase());
+      saveOwners(owners);
+      const users = getUsers();
+      const key = username.toLowerCase();
+      if (users[key]) {
+        users[key].activeTags = (users[key].activeTags || []).filter(t => t !== "OWNER");
+        saveUsers(users);
+      }
+      renderAdminPage("roles");
+    }
+
+    /* ── Ban system ─────────────────────────────────────────────── */
+    const BANNED_KEY = "osint_banned_users_v1";
+    function getBannedUsers() {
+      try { return JSON.parse(localStorage.getItem(BANNED_KEY) || "[]"); } catch { return []; }
+    }
+    function saveBannedUsers(arr) { localStorage.setItem(BANNED_KEY, JSON.stringify(arr)); }
+
+    window.banUser = function(username) {
+      const key = username.toLowerCase();
+      const banned = getBannedUsers();
+      if (!banned.includes(key)) { banned.push(key); saveBannedUsers(banned); }
+      renderAdminPage("users");
+    };
+    window.unbanUser = function(username) {
+      const key = username.toLowerCase();
+      saveBannedUsers(getBannedUsers().filter(b => b !== key));
+      renderAdminPage("users");
+    };
+
+    /* ── Moderation actions ─────────────────────────────────────── */
+    window.modSetStatus = function(source, idx, status) {
+      if (source === "forum") {
+        const pastes = JSON.parse(localStorage.getItem("osint_pastes_v1") || "[]");
+        if (pastes[idx]) { pastes[idx]._status = status; localStorage.setItem("osint_pastes_v1", JSON.stringify(pastes)); }
+      } else {
+        const questions = getSavedQuestions(source);
+        if (questions[idx]) { questions[idx]._status = status; saveQuestions(source, questions); }
+      }
+      renderAdminPage(source);
+    };
+
+    window.modDeletePost = function(source, idx) {
+      if (!confirm("Удалить это сообщение?")) return;
+      if (source === "forum") {
+        const pastes = JSON.parse(localStorage.getItem("osint_pastes_v1") || "[]");
+        pastes.splice(idx, 1);
+        localStorage.setItem("osint_pastes_v1", JSON.stringify(pastes));
+      } else {
+        const questions = getSavedQuestions(source);
+        questions.splice(idx, 1);
+        saveQuestions(source, questions);
+      }
+      renderAdminPage(source);
+    };
+
+    // Expose admin functions globally (called from dynamic HTML)
+    window.renderAdminPage = renderAdminPage;
+    window.addAdmin = addAdmin;
+    window.removeAdmin = removeAdmin;
+    window.makeAdmin = makeAdmin;
+
+    function switchAvatarTab(tab) {
+      ["color","emoji","image"].forEach(t => {
+        document.getElementById(`avatarTab${t[0].toUpperCase()+t.slice(1)}`).classList.toggle("active", t===tab);
+        document.getElementById(`avatarTab${t[0].toUpperCase()+t.slice(1)}Panel`).style.display = t===tab?"":"none";
+      });
+    }
+
+    function selectAvatarColor(color) {
+      const session = getSession();
+      if (!session) return;
+      saveUserProfile(session.username, { avatarColor: color, avatarEmoji: "", avatarImg: "" });
+      document.querySelectorAll(".avatar-color-swatch").forEach(s => s.classList.remove("selected"));
+      event.target.classList.add("selected");
+      refreshProfileAvatar();
+    }
+
+    function selectAvatarEmoji(emoji) {
+      const session = getSession();
+      if (!session) return;
+      saveUserProfile(session.username, { avatarEmoji: emoji, avatarImg: "" });
+      document.querySelectorAll(".avatar-emoji-btn").forEach(b => b.classList.remove("selected"));
+      event.target.classList.add("selected");
+      refreshProfileAvatar();
+    }
+
+    function handleAvatarUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) { alert("Файл слишком большой. Максимум 2 МБ."); return; }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const session = getSession();
+        if (!session) return;
+        saveUserProfile(session.username, { avatarImg: e.target.result, avatarEmoji: "" });
+        refreshProfileAvatar();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeAvatarImage() {
+      const session = getSession();
+      if (!session) return;
+      saveUserProfile(session.username, { avatarImg: "" });
+      renderProfilePage();
+    }
+
+    function refreshProfileAvatar() {
+      const session = getSession();
+      if (!session) return;
+      const profile = getUserProfile(session.username) || {};
+      const preview = document.getElementById("profileAvatarPreview");
+      if (!preview) return;
+      const nickname = profile.nickname || profile.username || session.username;
+      if (profile.avatarImg) {
+        preview.style.background = "";
+        preview.innerHTML = `<img src="${profile.avatarImg}" alt="avatar"/>`;
+      } else if (profile.avatarEmoji) {
+        preview.style.background = profile.avatarColor || AVATAR_COLORS[0];
+        preview.innerHTML = `<span style="font-size:2.6rem;">${profile.avatarEmoji}</span>`;
+      } else {
+        preview.style.background = profile.avatarColor || AVATAR_COLORS[0];
+        preview.innerHTML = `<span>${escapeHtml(nickname[0].toUpperCase())}</span>`;
+      }
+      updateNavForUser();
+    }
+
+    /* ── Save identity ───────────────────────────────────────── */
+    function saveIdentity() {
+      const session = getSession();
+      if (!session) return;
+      const nickname = document.getElementById("pfNickname").value.trim();
+      const newUsername = document.getElementById("pfUsername").value.trim();
+
+      if (!nickname || nickname.length < 1) { showProfileMsg("identitySavedMsg", "Никнейм не может быть пустым", true); return; }
+      if (!newUsername || newUsername.length < 3) { showProfileMsg("identitySavedMsg", "Юзернейм: мин. 3 символа", true); return; }
+      if (!/^[a-zA-Z0-9_\-а-яёА-ЯЁ]+$/.test(newUsername)) { showProfileMsg("identitySavedMsg", "Недопустимые символы в юзернейме", true); return; }
+
+      const users = getUsers();
+      const oldKey = session.username.toLowerCase();
+      const newKey = newUsername.toLowerCase();
+
+      // Check username uniqueness (allow keeping same)
+      if (newKey !== oldKey && users[newKey]) {
+        showProfileMsg("identitySavedMsg", "Этот юзернейм уже занят", true); return;
+      }
+
+      const userData = users[oldKey];
+      if (!userData) return;
+      userData.nickname = nickname;
+      userData.username = newUsername;
+
+      if (newKey !== oldKey) {
+        users[newKey] = userData;
+        delete users[oldKey];
+      } else {
+        users[oldKey] = userData;
+      }
+      saveUsers(users);
+      saveSession({ ...session, username: newUsername, nickname, avatar: nickname[0].toUpperCase() });
+      showProfileMsg("identitySavedMsg", "✓ Сохранено!", false);
+      updateNavForUser();
+    }
+
+    function saveBio() {
+      const session = getSession();
+      if (!session) return;
+      const bio = document.getElementById("pfBio").value.trim();
+      saveUserProfile(session.username, { bio });
+      showProfileMsg("bioSavedMsg", "✓ Сохранено!", false);
+    }
+
+    function changePassword() {
+      const session = getSession();
+      if (!session) return;
+      const cur = document.getElementById("pfCurrentPw").value;
+      const np  = document.getElementById("pfNewPw").value;
+      const np2 = document.getElementById("pfNewPw2").value;
+      const users = getUsers();
+      const user = users[session.username.toLowerCase()];
+      if (!user) return;
+
+      if (simpleHash(cur) !== user.passwordHash) { showProfileMsg("pwSavedMsg","✗ Неверный текущий пароль", true); return; }
+      if (!np || np.length < 6) { showProfileMsg("pwSavedMsg","✗ Новый пароль: мин. 6 символов", true); return; }
+      if (np !== np2) { showProfileMsg("pwSavedMsg","✗ Пароли не совпадают", true); return; }
+
+      user.passwordHash = simpleHash(np);
+      users[session.username.toLowerCase()] = user;
+      saveUsers(users);
+      document.getElementById("pfCurrentPw").value = "";
+      document.getElementById("pfNewPw").value = "";
+      document.getElementById("pfNewPw2").value = "";
+      showProfileMsg("pwSavedMsg","✓ Пароль изменён!", false);
+    }
+
+    function showProfileMsg(id, msg, isError) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = msg;
+      el.style.color = isError ? "#fca5a5" : "#86efac";
+      el.classList.add("show");
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove("show"), 3000);
+    }
+
+    /* ── Avatar render helper (shared) ──────────────────────── */
+    function renderAvatarHtml(profile, size = 52) {
+      const nickname = profile.nickname || profile.username || "?";
+      const bg = profile.avatarColor || AVATAR_COLORS[0];
+      const style = `width:${size}px;height:${size}px;font-size:${Math.round(size*0.4)}px;`;
+      if (profile.avatarImg) {
+        return `<div class="user-card-avatar" style="${style}"><img src="${profile.avatarImg}" alt=""/></div>`;
+      } else if (profile.avatarEmoji) {
+        return `<div class="user-card-avatar" style="${style}background:${bg};font-size:${Math.round(size*0.5)}px;">${profile.avatarEmoji}</div>`;
+      }
+      return `<div class="user-card-avatar" style="${style}background:${bg};">${escapeHtml(nickname[0].toUpperCase())}</div>`;
+    }
+
+    /* ── User search ─────────────────────────────────────────── */
+    function renderUserSearchPage() {
+      const resultsEl = document.getElementById("userSearchResults");
+      if (!resultsEl) return;
+      resultsEl.innerHTML = `<div class="no-users-msg"><i class="fa-solid fa-magnifying-glass"></i>Начните вводить юзернейм или никнейм</div>`;
+    }
+
+    function searchUsers(query) {
+      const resultsEl = document.getElementById("userSearchResults");
+      if (!resultsEl) return;
+      const q = query.replace(/^@/,"").trim().toLowerCase();
+      if (!q || q.length < 1) {
+        resultsEl.innerHTML = `<div class="no-users-msg"><i class="fa-solid fa-magnifying-glass"></i>Начните вводить юзернейм или никнейм</div>`;
+        return;
+      }
+      const users = getUsers();
+      const matches = Object.values(users).filter(u => {
+        const name = (u.username || "").toLowerCase();
+        const nick = (u.nickname || "").toLowerCase();
+        return name.includes(q) || nick.includes(q);
+      });
+      if (!matches.length) {
+        resultsEl.innerHTML = `<div class="no-users-msg"><i class="fa-solid fa-user-slash"></i>Пользователи не найдены</div>`;
+        return;
+      }
+      resultsEl.innerHTML = matches.map(u => {
+        const nick = u.nickname || u.username;
+        const bio = u.bio ? escapeHtml(u.bio.slice(0,80)) + (u.bio.length>80?"...":"") : "";
+        return `<div class="user-card" onclick="viewUserProfile('${escapeHtml(u.username)}')">
+          ${renderAvatarHtml(u, 52)}
+          <div class="user-card-info">
+            <div class="user-card-nickname">${escapeHtml(nick)}</div>
+            <div class="user-card-username">@${escapeHtml(u.username)}</div>
+            ${renderUserTagsHtml(u)}
+            ${bio ? `<div class="user-card-bio">${bio}</div>` : ""}
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-muted);"></i>
+        </div>`;
+      }).join("");
+    }
+
+    /* ── View public profile ─────────────────────────────────── */
+    function viewUserProfile(username) {
+      navigateTo("viewprofile", { profileUsername: username });
+    }
+
+    function renderViewProfile(username) {
+      const container = document.getElementById("viewProfileContent");
+      if (!container) return;
+      if (!username) { container.innerHTML = "<p>Профиль не найден.</p>"; return; }
+      const users = getUsers();
+      const profile = users[username.toLowerCase()];
+      if (!profile) { container.innerHTML = `<div class="no-users-msg"><i class="fa-solid fa-user-slash"></i>Пользователь @${escapeHtml(username)} не найден.</div>`; return; }
+      const nick = profile.nickname || profile.username;
+      const joined = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString("ru-RU",{year:"numeric",month:"long"}) : "";
+      const bg = profile.avatarColor || AVATAR_COLORS[0];
+      let avatarHtml;
+      if (profile.avatarImg) avatarHtml = `<img src="${profile.avatarImg}" alt=""/>`;
+      else if (profile.avatarEmoji) avatarHtml = `<span style="font-size:2.4rem;">${profile.avatarEmoji}</span>`;
+      else avatarHtml = `<span>${escapeHtml(nick[0].toUpperCase())}</span>`;
+      const avatarStyle = profile.avatarImg ? "" : `background:${bg};`;
+
+      container.innerHTML = `
+        <div class="pubprofile-header">
+          <div class="pubprofile-avatar" style="${avatarStyle}">${avatarHtml}</div>
+          <div>
+            <div class="pubprofile-name">${escapeHtml(nick)}</div>
+            <div class="pubprofile-tag">@${escapeHtml(profile.username)}</div>
+            ${renderUserTagsHtml(profile)}
+            ${joined ? `<div style="font-size:0.83rem;color:var(--text-muted);margin-top:6px;"><i class="fa-regular fa-calendar" style="margin-right:4px;"></i>С нами с ${joined}</div>` : ""}
+          </div>
+        </div>
+        ${profile.bio ? `<div class="pubprofile-bio">${escapeHtml(profile.bio)}</div>` : `<div class="pubprofile-bio" style="opacity:0.5;font-style:italic;">Описание не заполнено.</div>`}`;
+    }
+
+    /* ── Patch renderRoute to handle profile pages ───────────── */
+    const _origGetRouteStateFromUrl = getRouteStateFromUrl;
+    function getRouteStateFromUrl() {
+      const url = new URL(window.location.href);
+      const view = url.searchParams.get("view");
+      const validRoutes = ["agreement","manuals","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","admin","complaints","thread"];
+      const route = validRoutes.includes(view) ? view : "home";
+      return {
+        route,
+        moduleId: route === "manuals" ? url.searchParams.get("module") : null,
+        profileUsername: url.searchParams.get("u") || null,
+        threadId: route === "thread" ? parseInt(url.searchParams.get("t"), 10) : null
+      };
+    }
+
+    const _origBuildUrl = buildUrl;
+    function buildUrl(route, moduleId, extra) {
+      const url = new URL(window.location.href);
+      if (route === "home") {
+        url.searchParams.delete("view");
+        url.searchParams.delete("module");
+        url.searchParams.delete("u");
+        url.searchParams.delete("t");
+      } else {
+        url.searchParams.set("view", route);
+        if (route === "manuals" && moduleId) url.searchParams.set("module", moduleId);
+        else url.searchParams.delete("module");
+        if (route === "viewprofile" && extra && extra.profileUsername) url.searchParams.set("u", extra.profileUsername);
+        else url.searchParams.delete("u");
+        if (route === "thread" && extra && typeof extra.threadId !== 'undefined') url.searchParams.set("t", extra.threadId);
+        else url.searchParams.delete("t");
+      }
+      return url;
+    }
+
+    const _origNavigateTo = navigateTo;
+    function navigateTo(route, options = {}) {
+      const moduleId = options.moduleId || null;
+      const method = options.replace ? "replaceState" : "pushState";
+      const url = buildUrl(route, moduleId, options);
+      history[method]({ route, moduleId }, "", url);
+      renderRoute();
+    }
+
+    /* Patch renderRoute to handle new pages */
+    const _origRenderRoute = renderRoute;
+    function renderRoute() {
+      const { route, moduleId, profileUsername, threadId } = getRouteStateFromUrl();
+      state.currentRoute = route;
+      state.modalModuleId = moduleId;
+
+      const allPages = ["home","manuals","agreement","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","admin","complaints","thread"];
+      allPages.forEach(p => {
+        const el = document.getElementById(`page-${p}`);
+        if (el) el.classList.remove("active");
+      });
+
+      const canvas = document.getElementById("particlesCanvas");
+      const textPages = ["agreement","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","thread","complaints"];
+      canvas.style.opacity = textPages.includes(route) ? "0.44" : "0.62";
+
+      const target = document.getElementById(`page-${route}`) || document.getElementById("page-home");
+      target.classList.add("active");
+
+      setActiveNavLink(route);
+      renderManualModal(moduleId);
+      updateModeratorNav();
+
+      if (route === "profile") renderProfilePage();
+      if (route === "usersearch") renderUserSearchPage();
+      if (route === "viewprofile") renderViewProfile(profileUsername);
       if (route === "admin") renderAdminPage();
       if (route === "forum") { renderPasteCards(); updateForumThreadCount(); updateForumAnonUI(); }
       if (route === "thread") renderThreadPage(threadId);
