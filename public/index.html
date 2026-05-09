@@ -1664,6 +1664,42 @@
       }
     }
 
+    /* ══ SPACING FIXES ══ */
+    .mod-post-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .paste-card { margin-bottom: 16px; }
+    .paste-replies { margin-top: 12px; padding-top: 12px; }
+    .paste-card-header { gap: 10px; }
+    .paste-meta { gap: 4px; }
+    .paste-body { margin-top: 10px; }
+    .paste-actions { margin-top: 12px; padding-top: 10px; }
+    .paste-topic-tag { margin-top: 10px !important; margin-bottom: 6px !important; }
+    .forum-thread-stats { gap: 14px; margin-top: 10px; }
+    .post-card { margin-bottom: 16px; }
+    .post-header { gap: 10px; }
+    .post-body { margin-top: 8px; margin-bottom: 8px; }
+    .post-actions { margin-top: 10px; }
+    .replies-list { margin-top: 12px; padding-top: 10px; }
+    .reply-card { margin-bottom: 10px; padding-bottom: 10px; }
+    .reply-form-wrap { margin-top: 10px; }
+    .section-form-wrap { margin-bottom: 24px; }
+    .admin-stats-grid { gap: 12px; }
+    .admin-tabs { gap: 8px; margin-bottom: 20px; }
+    .admin-user-row { gap: 10px; padding: 10px 14px; margin-bottom: 6px; }
+    .mod-post-card { margin-bottom: 12px; padding: 14px; }
+    .mod-post-meta { gap: 8px; margin-bottom: 8px; }
+    .mod-post-text { margin-bottom: 10px; line-height: 1.7; }
+    .profile-card { margin-bottom: 20px; padding: 22px 20px; }
+    .profile-field { margin-bottom: 16px; }
+    .tags-selector-grid { gap: 8px; margin-top: 12px; }
+    .paste-reply-card { margin-bottom: 10px; padding-bottom: 10px; }
+    .paste-reply-form { margin-top: 12px; padding-top: 12px; }
+    .reactions-bar { gap: 6px; margin-top: 12px; padding-top: 10px; }
+    .post-empty { padding: 60px 20px; }
+    .paste-empty { padding: 60px 20px; }
+    .back-btn { margin-top: 24px; }
+    .admin-add-row { gap: 8px; margin-top: 12px; }
+    .admin-section-title { margin-bottom: 16px; }
+
     /* ═══════════════════════════════════════════════════════════
        AUTH MODAL & SYSTEM
     ═══════════════════════════════════════════════════════════ */
@@ -5701,7 +5737,7 @@
       const threadActions = isAdm ? `<div class="thread-actions"><button class="admin-btn warn" onclick="menuSetStatus(${threadId},'pending')">На рассмотрении</button><button class="admin-btn ok" onclick="menuSetStatus(${threadId},'read')">Прочитано</button><button class="admin-btn info" onclick="menuPinPost(${threadId})">${post._pinned? 'Открепить':'Закрепить'}</button></div>` : "";
       container.innerHTML = `
         <div class="thread-header">
-          <div class="thread-breadcrumbs"><a href="/forum" onclick="event.preventDefault();navigateTo('forum');">Форум</a> · <span>${escapeHtml(typeInfo.label)}</span></div>
+          <div class="thread-breadcrumbs"><a href="/forum" onclick="event.preventDefault();navigateTo('forum');">Форум</a> · <a href="#thread-card-${threadId}" onclick="event.preventDefault();document.getElementById('thread-card-${threadId}')?.scrollIntoView({behavior:'smooth'});">${escapeHtml(typeInfo.label)}</a></div>
           <h1>${post._pinned ? '📌 ' : ''}${escapeHtml(post.topic)}</h1>
           <div class="thread-meta">
             <span>Автор: ${escapeHtml(author)}</span>
@@ -5711,7 +5747,7 @@
           ${threadActions}
           ${(isAdm || isOwn) ? `<button class="admin-btn danger" onclick="deleteThreadFromPage(${threadId})" style="margin-top:8px;"><i class="fa-solid fa-trash"></i> Удалить тему</button>` : ''}
         </div>
-        <div class="thread-card">
+        <div class="thread-card" id="thread-card-${threadId}">
           <div class="paste-card-header">
             <div class="paste-avatar">${pasteInitial(post.anonymous ? 'А' : post.author)}</div>
             <div class="paste-meta">
@@ -5759,12 +5795,25 @@
       const post = pastes[idx];
       if (!post) return;
       if (post._serverId) {
-        fetch('/api/threads/' + post._serverId, { method: 'DELETE' }).catch(() => {});
+        fetch('/api/threads/' + post._serverId, { method: 'DELETE' })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok) {
+              pastes.splice(idx, 1);
+              appCache.threads = pastes;
+              navigateTo('forum');
+              showReplyToast("✓ Тема удалена!");
+            } else {
+              alert(data.error || "Ошибка удаления.");
+            }
+          })
+          .catch(() => alert("Ошибка соединения."));
+      } else {
+        pastes.splice(idx, 1);
+        appCache.threads = pastes;
+        navigateTo('forum');
+        showReplyToast("✓ Тема удалена!");
       }
-      pastes.splice(idx, 1);
-      appCache.threads = pastes;
-      navigateTo('forum');
-      showReplyToast("✓ Тема удалена!");
     };
 
     window.deleteReplyFromThread = function(threadIdx, replyIdx) {
@@ -5774,12 +5823,25 @@
       if (!post || !post.replies) return;
       const reply = post.replies[replyIdx];
       if (reply?._serverId && post._serverId) {
-        fetch('/api/threads/' + post._serverId + '/replies/' + reply._serverId, { method: 'DELETE' }).catch(() => {});
+        fetch('/api/threads/' + post._serverId + '/replies/' + reply._serverId, { method: 'DELETE' })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok) {
+              post.replies.splice(replyIdx, 1);
+              appCache.threads = pastes;
+              renderThreadPage(threadIdx);
+              showReplyToast("✓ Ответ удалён!");
+            } else {
+              alert(data.error || "Ошибка удаления ответа.");
+            }
+          })
+          .catch(() => alert("Ошибка соединения."));
+      } else {
+        post.replies.splice(replyIdx, 1);
+        appCache.threads = pastes;
+        renderThreadPage(threadIdx);
+        showReplyToast("✓ Ответ удалён!");
       }
-      post.replies.splice(replyIdx, 1);
-      appCache.threads = pastes;
-      renderThreadPage(threadIdx);
-      showReplyToast("✓ Ответ удалён!");
     };
 
     function renderComplaintsPage() {
@@ -5832,20 +5894,31 @@
       const complaints = getComplaints();
       const item = complaints.find(c => c.id === id);
       if (!item) return;
-      item.status = status;
-      appCache.complaints = complaints;
       fetch('/api/complaints/' + encodeURIComponent(id), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
-      }).catch(() => {});
-      renderComplaintsPage();
+      }).then(r => r.json()).then(data => {
+        if (data.ok) {
+          item.status = status;
+          appCache.complaints = complaints;
+          renderComplaintsPage();
+        } else {
+          alert(data.error || "Ошибка обновления статуса.");
+        }
+      }).catch(() => alert("Ошибка соединения."));
     };
 
     window.resolveComplaint = function(id) {
-      appCache.complaints = getComplaints().filter(c => c.id !== id);
-      fetch('/api/complaints/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
-      renderComplaintsPage();
+      fetch('/api/complaints/' + encodeURIComponent(id), { method: 'DELETE' })
+        .then(r => r.json()).then(data => {
+          if (data.ok) {
+            appCache.complaints = getComplaints().filter(c => c.id !== id);
+            renderComplaintsPage();
+          } else {
+            alert(data.error || "Ошибка решения жалобы.");
+          }
+        }).catch(() => alert("Ошибка соединения."));
     };
 
     function updateModeratorNav() {
@@ -6598,26 +6671,38 @@
 
     window.modDeletePost = function(source, idx) {
       if (!confirm("Удалить это сообщение?")) return;
+      const doLocalDelete = function() {
+        if (source === "forum") {
+          const pastes = getPastes();
+          pastes.splice(idx, 1);
+          appCache.threads = pastes;
+          renderAdminPage(source);
+        } else {
+          const questions = getSavedQuestions(source);
+          questions.splice(idx, 1);
+          saveQuestions(source, questions);
+          renderQuestionList(source);
+        }
+      };
       if (source === "forum") {
         const pastes = getPastes();
         const post = pastes[idx];
         if (post?._serverId) {
-          fetch('/api/threads/' + post._serverId, { method: 'DELETE' }).catch(() => {});
-        }
-        pastes.splice(idx, 1);
-        appCache.threads = pastes;
+          fetch('/api/threads/' + post._serverId, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(data => { if (data.ok) doLocalDelete(); else alert(data.error || "Ошибка удаления."); })
+            .catch(() => alert("Ошибка соединения."));
+        } else { doLocalDelete(); }
       } else {
         const questions = getSavedQuestions(source);
         const postId = questions[idx]?._serverId;
         if (postId) {
-          fetch('/api/sections/' + encodeURIComponent(source) + '/' + postId, { method: 'DELETE' }).catch(() => {});
-        }
-        questions.splice(idx, 1);
-        saveQuestions(source, questions);
-        renderQuestionList(source);
-        return;
+          fetch('/api/sections/' + encodeURIComponent(source) + '/' + postId, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(data => { if (data.ok) doLocalDelete(); else alert(data.error || "Ошибка удаления."); })
+            .catch(() => alert("Ошибка соединения."));
+        } else { doLocalDelete(); }
       }
-      renderAdminPage(source);
     };
 
     // Expose admin functions globally (called from dynamic HTML)
@@ -7285,13 +7370,27 @@
       const post = pastes[idx];
       if (!post) return;
       if (post._serverId) {
-        fetch('/api/threads/' + post._serverId, { method: 'DELETE' }).catch(() => {});
+        fetch('/api/threads/' + post._serverId, { method: 'DELETE' })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok) {
+              pastes.splice(idx, 1);
+              appCache.threads = pastes;
+              renderPasteCards();
+              updateForumThreadCount();
+              showReplyToast("✓ Пост удалён!");
+            } else {
+              alert(data.error || "Ошибка удаления.");
+            }
+          })
+          .catch(() => alert("Ошибка соединения."));
+      } else {
+        pastes.splice(idx, 1);
+        appCache.threads = pastes;
+        renderPasteCards();
+        updateForumThreadCount();
+        showReplyToast("✓ Пост удалён!");
       }
-      pastes.splice(idx, 1);
-      appCache.threads = pastes;
-      renderPasteCards();
-      updateForumThreadCount();
-      showReplyToast("✓ Пост удалён!");
     };
 
     window.menuBanAuthor = function(author) {
