@@ -11,7 +11,7 @@ COPY . .
 
 FROM node:22-alpine
 
-RUN apk add --no-cache libatomic
+RUN apk add --no-cache libatomic rclone curl
 
 WORKDIR /app
 

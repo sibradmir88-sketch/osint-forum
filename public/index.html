@@ -4991,6 +4991,7 @@
         const u = data.user;
         saveSession({ username: u.username, avatar: u.avatar, provider: 'email' });
         closeAuthModal();
+        await syncFromServer();
         updateNavForUser();
         showReplyToast('Аккаунт создан! Добро пожаловать, ' + u.nickname);
       } catch (e) {
@@ -5016,6 +5017,7 @@
         const u = data.user;
         saveSession({ username: u.username, avatar: u.avatar, provider: 'email' });
         closeAuthModal();
+        await syncFromServer();
         updateNavForUser();
         showReplyToast('Выполнен вход как ' + u.nickname);
       } catch (e) {
@@ -5241,6 +5243,46 @@
           }
         }
       } catch {}
+      await syncFromServer();
+    }
+
+    async function syncFromServer() {
+      try {
+        const res = await fetch('/api/sync/init');
+        const data = await res.json();
+        if (!data.ok) return;
+        // Sync admin list
+        if (data.admins && data.admins.length) {
+          localStorage.setItem(ADMIN_KEY, JSON.stringify(data.admins));
+        }
+        // Sync moderator list
+        if (data.moderators) {
+          localStorage.setItem(MODERATOR_KEY, JSON.stringify(data.moderators));
+        }
+        // Sync owner list
+        if (data.owners) {
+          localStorage.setItem(OWNER_KEY, JSON.stringify(data.owners));
+        }
+        // Sync user tags
+        if (data.userTags) {
+          const users = getUsers();
+          let changed = false;
+          Object.entries(data.userTags).forEach(([uname, tags]) => {
+            const key = uname.toLowerCase();
+            if (users[key]) {
+              if (JSON.stringify(users[key].activeTags) !== JSON.stringify(tags)) {
+                users[key].activeTags = tags;
+                changed = true;
+              }
+            } else {
+              users[key] = { username: key, activeTags: tags, nickname: key, avatar: key[0].toUpperCase(), createdAt: new Date().toISOString() };
+              changed = true;
+            }
+          });
+          if (changed) saveUsers(users);
+        }
+        updateNavForUser();
+      } catch(e) { console.error('Sync error:', e); }
     }
 
     /* ═══════════════════════════════════════════════════════════
@@ -6248,13 +6290,19 @@
         </div>`;
     }
 
-    function addAdmin() {
+    async function addAdmin() {
       const inp = document.getElementById("newAdminInput");
       const val = (inp.value || "").trim().replace(/^@/,"").toLowerCase();
       const msg = document.getElementById("adminActionMsg");
       if (!val) { msg.textContent = "Введите юзернейм."; msg.style.color="#fca5a5"; return; }
       const admins = getAdmins();
       if (admins.map(a=>a.toLowerCase()).includes(val)) { msg.textContent = "@"+val+" уже администратор."; msg.style.color="#fca5a5"; return; }
+      // Sync to server first
+      try {
+        const res = await fetch('/api/admin/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: val }) });
+        const data = await res.json();
+        if (!data.ok) { msg.textContent = "Ошибка сервера."; msg.style.color="#fca5a5"; return; }
+      } catch(e) { msg.textContent = "Ошибка соединения."; msg.style.color="#fca5a5"; return; }
       admins.push(val);
       saveAdmins(admins);
       // Give ADMIN tag if user exists
@@ -6270,7 +6318,11 @@
       renderAdminPage("admins");
     }
 
-    function removeAdmin(username) {
+    async function removeAdmin(username) {
+      // Sync to server first
+      try {
+        await fetch('/api/admin/admins/' + encodeURIComponent(username), { method: 'DELETE' });
+      } catch(e) {}
       const admins = getAdmins().filter(a => a.toLowerCase() !== username.toLowerCase());
       saveAdmins(admins);
       // Remove ADMIN tag
@@ -6283,7 +6335,11 @@
       renderAdminPage("admins");
     }
 
-    function makeAdmin(username) {
+    async function makeAdmin(username) {
+      // Sync to server first
+      try {
+        await fetch('/api/admin/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) });
+      } catch(e) {}
       const admins = getAdmins();
       if (!admins.map(a=>a.toLowerCase()).includes(username.toLowerCase())) {
         admins.push(username.toLowerCase());
@@ -6299,10 +6355,16 @@
       renderAdminPage("users");
     }
 
-    function addModerator() {
+    async function addModerator() {
       const inp = document.getElementById("newModeratorInput");
       const val = (inp.value || "").trim().replace(/^@/,"").toLowerCase();
       if (!val) return;
+      // Sync to server first
+      try {
+        const res = await fetch('/api/admin/moderators', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: val }) });
+        const data = await res.json();
+        if (!data.ok) return;
+      } catch(e) { return; }
       const mods = getModerators();
       if (mods.map(u => u.toLowerCase()).includes(val)) return;
       mods.push(val);
@@ -6317,7 +6379,11 @@
       renderAdminPage("roles");
     }
 
-    function removeModerator(username) {
+    async function removeModerator(username) {
+      // Sync to server first
+      try {
+        await fetch('/api/admin/moderators/' + encodeURIComponent(username), { method: 'DELETE' });
+      } catch(e) {}
       const mods = getModerators().filter(u => u.toLowerCase() !== username.toLowerCase());
       saveModerators(mods);
       const users = getUsers();
@@ -6329,10 +6395,16 @@
       renderAdminPage("roles");
     }
 
-    function addOwner() {
+    async function addOwner() {
       const inp = document.getElementById("newOwnerInput");
       const val = (inp.value || "").trim().replace(/^@/,"").toLowerCase();
       if (!val) return;
+      // Sync to server first
+      try {
+        const res = await fetch('/api/admin/owners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: val }) });
+        const data = await res.json();
+        if (!data.ok) return;
+      } catch(e) { return; }
       const owners = getOwners();
       if (owners.map(u => u.toLowerCase()).includes(val)) return;
       owners.push(val);
@@ -6347,7 +6419,11 @@
       renderAdminPage("roles");
     }
 
-    function removeOwner(username) {
+    async function removeOwner(username) {
+      // Sync to server first
+      try {
+        await fetch('/api/admin/owners/' + encodeURIComponent(username), { method: 'DELETE' });
+      } catch(e) {}
       const owners = getOwners().filter(u => u.toLowerCase() !== username.toLowerCase());
       saveOwners(owners);
       const users = getUsers();

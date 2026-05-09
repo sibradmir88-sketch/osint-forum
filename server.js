@@ -10,8 +10,33 @@ const Database      = require('better-sqlite3');
 const path          = require('path');
 const fs = require('fs');
 const crypto        = require('crypto');
+const { execSync, exec } = require('child_process');
 const DB_PATH = fs.existsSync('/data') ? '/data/forum.db' : 'forum.db';
+
+// Auto-restore from Google Drive if local DB missing/empty
+if (!fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size < 100) {
+  try {
+    const restorePath = '/tmp/forum-restore.db';
+    execSync(`rclone copyto gdrive:osint-forum-backup/latest.db ${restorePath} 2>/dev/null`, { timeout: 30000 });
+    if (fs.existsSync(restorePath) && fs.statSync(restorePath).size > 100) {
+      fs.copyFileSync(restorePath, DB_PATH);
+      console.log('✓ Database restored from Google Drive backup');
+    }
+  } catch(e) { console.log('No Google Drive backup to restore'); }
+}
+
 const db = new Database(DB_PATH);
+
+// Async backup to Google Drive after write operations
+function backupDb() {
+  try {
+    const backupPath = '/tmp/forum-writebackup.db';
+    db.exec(`VACUUM INTO '${backupPath}'`);
+    exec(`rclone copyto "${backupPath}" gdrive:osint-forum-backup/latest.db 2>/dev/null`, { timeout: 30000 }, (err) => {
+      if (err) console.error('Backup warning:', err.message);
+    });
+  } catch(e) {}
+}
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -86,6 +111,17 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS moderators (
+    username   TEXT    PRIMARY KEY,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS owners (
+    username   TEXT    PRIMARY KEY,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
 ['illuminatov', 'detailing'].forEach(u => {
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
 });
@@ -93,6 +129,14 @@ db.exec(`
 function isAdmin(username) {
   if (!username) return false;
   return !!db.prepare("SELECT username FROM admin_usernames WHERE username=?").get(username.toLowerCase());
+}
+function isModerator(username) {
+  if (!username) return false;
+  return !!db.prepare("SELECT username FROM moderators WHERE username=?").get(username.toLowerCase());
+}
+function isOwner(username) {
+  if (!username) return false;
+  return !!db.prepare("SELECT username FROM owners WHERE username=?").get(username.toLowerCase());
 }
 
 function hashPassword(pw) {
@@ -104,7 +148,9 @@ function safeUser(u) {
   return { id: u.id, username: u.username, nickname: u.nickname || u.username,
            avatar: u.avatar, avatar_img: u.avatar_img, provider: u.provider,
            active_tags: JSON.parse(u.active_tags || '["BEGINNER"]'),
-           is_admin: isAdmin(u.username) };
+           is_admin: isAdmin(u.username),
+           is_moderator: isModerator(u.username),
+           is_owner: isOwner(u.username) };
 }
 
 app.set('trust proxy', 1);
@@ -149,6 +195,7 @@ app.post('/api/auth/register', (req, res) => {
         username[0].toUpperCase(), 'email', hashPassword(password), '["BEGINNER"]');
 
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid);
+  backupDb();
   loginUser(req, res, user);
 });
 
@@ -171,6 +218,17 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', (req, res) => {
   res.json({ user: safeUser(req.user) });
+});
+
+// Cross-device sync: returns all role lists and user tags
+app.get('/api/sync/init', (req, res) => {
+  const admins = db.prepare('SELECT username FROM admin_usernames').all().map(r => r.username);
+  const moderators = db.prepare('SELECT username FROM moderators').all().map(r => r.username);
+  const owners = db.prepare('SELECT username FROM owners').all().map(r => r.username);
+  const userRows = db.prepare('SELECT username, active_tags FROM users').all();
+  const userTags = {};
+  userRows.forEach(u => { userTags[u.username] = JSON.parse(u.active_tags || '["BEGINNER"]'); });
+  res.json({ ok: true, admins, moderators, owners, userTags });
 });
 
 app.get('/api/threads', (req, res) => {
@@ -203,6 +261,7 @@ app.post('/api/threads', (req, res) => {
   const info = db.prepare(
     `INSERT INTO threads (type, topic, text, author_id, anonymous) VALUES (?,?,?,?,?)`
   ).run(type || 'paste', topic.trim(), text.trim(), author_id, anonymous ? 1 : 0);
+  backupDb();
   res.json({ ok: true, thread: db.prepare('SELECT * FROM threads WHERE id=?').get(info.lastInsertRowid) });
 });
 
@@ -214,6 +273,7 @@ app.post('/api/threads/:id/replies', (req, res) => {
   db.prepare(
     `INSERT INTO replies (thread_id, text, author_id, anonymous) VALUES (?,?,?,?)`
   ).run(req.params.id, text.trim(), req.user?.id || null, anonymous ? 1 : 0);
+  backupDb();
   res.json({ ok: true });
 });
 
@@ -241,6 +301,7 @@ app.post('/api/sections/:section', (req, res) => {
   const info = db.prepare(
     `INSERT INTO section_posts (section, text, author_id) VALUES (?,?,?)`
   ).run(req.params.section, text.trim(), req.user?.id || null);
+  backupDb();
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
@@ -250,6 +311,7 @@ app.post('/api/sections/:section/:postId/replies', (req, res) => {
   db.prepare(
     `INSERT INTO section_replies (post_id, text, author_id) VALUES (?,?,?)`
   ).run(req.params.postId, text.trim(), req.user?.id || null);
+  backupDb();
   res.json({ ok: true });
 });
 
@@ -258,6 +320,7 @@ app.delete('/api/sections/:section/:postId', (req, res) => {
   if (!post) return res.json({ ok: false, error: 'Пост не найден.' });
   if (post.author_id !== req.user?.id) return res.json({ ok: false, error: 'Только автор может удалить.' });
   db.prepare('DELETE FROM section_posts WHERE id=?').run(req.params.postId);
+  backupDb();
   res.json({ ok: true });
 });
 
@@ -266,6 +329,7 @@ app.delete('/api/sections/:section/:postId/replies/:replyId', (req, res) => {
   if (!reply) return res.json({ ok: false, error: 'Ответ не найден.' });
   if (reply.author_id !== req.user?.id) return res.json({ ok: false, error: 'Только автор может удалить.' });
   db.prepare('DELETE FROM section_replies WHERE id=?').run(req.params.replyId);
+  backupDb();
   res.json({ ok: true });
 });
 
@@ -281,6 +345,7 @@ app.patch('/api/users/me', (req, res) => {
   db.prepare('UPDATE users SET nickname=?, avatar=?, active_tags=? WHERE id=?')
     .run(nickname || req.user.nickname, avatar || req.user.avatar,
          active_tags ? JSON.stringify(active_tags) : (req.user.active_tags || '["BEGINNER"]'), req.user.id);
+  backupDb();
   res.json({ ok: true });
 });
 
@@ -301,6 +366,7 @@ app.post('/api/admin/admins', (req, res) => {
     if (!tags.includes('ADMIN')) tags.push('ADMIN');
     db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
   }
+  backupDb();
   res.json({ ok: true });
 });
 
@@ -313,6 +379,7 @@ app.delete('/api/admin/admins/:username', (req, res) => {
     let tags = JSON.parse(user.active_tags || '["BEGINNER"]').filter(t => t !== 'ADMIN');
     db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
   }
+  backupDb();
   res.json({ ok: true });
 });
 
@@ -335,6 +402,83 @@ app.post('/api/admin/db-import', (req, res) => {
   res.json({ ok: false, error: 'Используй прямой SCP/SFTP для замены forum.db.' });
 });
 
+// ── Moderator management ──────────────────────────────────────
+app.get('/api/admin/moderators', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  res.json({ ok: true, moderators: db.prepare('SELECT username FROM moderators').all().map(r => r.username) });
+});
+
+app.post('/api/admin/moderators', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const { username } = req.body;
+  if (!username) return res.json({ ok: false, error: 'Укажите username.' });
+  const clean = username.toLowerCase().replace(/^@/, '');
+  db.prepare('INSERT OR IGNORE INTO moderators (username) VALUES (?)').run(clean);
+  const user = db.prepare('SELECT * FROM users WHERE username=?').get(clean);
+  if (user) {
+    let tags = JSON.parse(user.active_tags || '["BEGINNER"]');
+    if (!tags.includes('MODERATOR')) tags.push('MODERATOR');
+    db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/moderators/:username', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const clean = req.params.username.toLowerCase();
+  db.prepare('DELETE FROM moderators WHERE username=?').run(clean);
+  const user = db.prepare('SELECT * FROM users WHERE username=?').get(clean);
+  if (user) {
+    let tags = JSON.parse(user.active_tags || '["BEGINNER"]').filter(t => t !== 'MODERATOR');
+    db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Owner management ──────────────────────────────────────────
+app.get('/api/admin/owners', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  res.json({ ok: true, owners: db.prepare('SELECT username FROM owners').all().map(r => r.username) });
+});
+
+app.post('/api/admin/owners', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const { username } = req.body;
+  if (!username) return res.json({ ok: false, error: 'Укажите username.' });
+  const clean = username.toLowerCase().replace(/^@/, '');
+  db.prepare('INSERT OR IGNORE INTO owners (username) VALUES (?)').run(clean);
+  const user = db.prepare('SELECT * FROM users WHERE username=?').get(clean);
+  if (user) {
+    let tags = JSON.parse(user.active_tags || '["BEGINNER"]');
+    if (!tags.includes('OWNER')) tags.push('OWNER');
+    db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/owners/:username', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const clean = req.params.username.toLowerCase();
+  db.prepare('DELETE FROM owners WHERE username=?').run(clean);
+  const user = db.prepare('SELECT * FROM users WHERE username=?').get(clean);
+  if (user) {
+    let tags = JSON.parse(user.active_tags || '["BEGINNER"]').filter(t => t !== 'OWNER');
+    db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Manual backup trigger ─────────────────────────────────────
+app.post('/api/admin/backup', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  backupDb();
+  res.json({ ok: true, message: 'Backup started to Google Drive' });
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -342,5 +486,7 @@ app.get('*', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`OSINT Forum запущен на порту ${PORT}`);
   console.log(`Локально: http://localhost:${PORT}`);
+  // Periodic backup every 5 minutes
+  setInterval(backupDb, 5 * 60 * 1000);
 });
 console.log("=== Server module loaded ===");
