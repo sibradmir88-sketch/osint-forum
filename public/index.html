@@ -5223,19 +5223,17 @@
           const u = data.user;
           const users = getUsers();
           const key = u.username.toLowerCase();
-          if (!users[key]) {
-            users[key] = {
-              username: u.username,
-              nickname: u.nickname || u.username,
-              email: u.email || '',
-              avatar: u.avatar || u.username[0].toUpperCase(),
-              avatarImg: u.avatar_img || '',
-              provider: u.provider,
-              createdAt: new Date().toISOString(),
-              activeTags: u.active_tags || ['BEGINNER']
-            };
-            saveUsers(users);
-          }
+          users[key] = {
+            username: u.username,
+            nickname: u.nickname || u.username,
+            email: u.email || '',
+            avatar: u.avatar || u.username[0].toUpperCase(),
+            avatarImg: u.avatar_img || '',
+            provider: u.provider,
+            createdAt: new Date().toISOString(),
+            activeTags: u.active_tags || ['BEGINNER']
+          };
+          saveUsers(users);
           const existingSession = getSession();
           if (!existingSession || existingSession.username !== u.username) {
             saveSession({ username: u.username, avatar: u.avatar || u.username[0].toUpperCase(), provider: u.provider });
