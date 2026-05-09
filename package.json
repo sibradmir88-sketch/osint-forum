@@ -1,0 +1,21 @@
+{
+  "name": "osint-forum",
+  "version": "2.0.0",
+  "description": "OSINT Forum — fullstack forum with SQLite",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "express-session": "^1.18.0",
+    "nodemailer": "^8.0.7"
+  }
+}
