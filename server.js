@@ -10,20 +10,8 @@ const Database      = require('better-sqlite3');
 const path          = require('path');
 const fs = require('fs');
 const crypto        = require('crypto');
-const { execSync, exec } = require('child_process');
+const { exec } = require('child_process');
 const DB_PATH = fs.existsSync('/data') ? '/data/forum.db' : 'forum.db';
-
-// Auto-restore from Google Drive if local DB missing/empty
-if (!fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size < 100) {
-  try {
-    const restorePath = '/tmp/forum-restore.db';
-    execSync(`rclone copyto gdrive:osint-forum-backup/latest.db ${restorePath} 2>/dev/null`, { timeout: 30000 });
-    if (fs.existsSync(restorePath) && fs.statSync(restorePath).size > 100) {
-      fs.copyFileSync(restorePath, DB_PATH);
-      console.log('✓ Database restored from Google Drive backup');
-    }
-  } catch(e) { console.log('No Google Drive backup to restore'); }
-}
 
 const db = new Database(DB_PATH);
 

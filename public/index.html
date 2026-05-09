@@ -6818,7 +6818,6 @@
       initModalEvents();
       initParticles();
       initPastePage();
-      syncPastesFromServer().catch(() => {});
 
       window.addEventListener("popstate", renderRoute);
       const initial = getRouteStateFromUrl();
@@ -6923,12 +6922,13 @@
             }))
           }));
           const existing = getPastes();
-          const localOnly = existing.filter(p => !p._serverId);
-          const seenTopics = new Set(serverPastes.map(p => p.topic + '|' + p.date));
-          const trulyLocal = localOnly.filter(p => !seenTopics.has(p.topic + '|' + p.date));
-          localStorage.setItem(PASTE_STORAGE_KEY, JSON.stringify([...trulyLocal, ...serverPastes]));
+          const serverIds = new Set(serverPastes.map(p => p._serverId));
+          const localOnly = existing.filter(p => !serverIds.has(p._serverId));
+          localStorage.setItem(PASTE_STORAGE_KEY, JSON.stringify([...localOnly, ...serverPastes]));
+          return true;
         }
       } catch(e) { console.error('syncPastesFromServer error:', e); }
+      return false;
     }
 
     async function savePasteToServer(paste) {
