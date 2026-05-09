@@ -17,6 +17,8 @@ WORKDIR /app
 
 COPY --from=build /app /app
 
+RUN mkdir -p /data && chmod 777 /data
+
 EXPOSE 3000
 
 CMD ["node", "server.js"]

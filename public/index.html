@@ -5909,7 +5909,7 @@
             <div class="profile-card">
               <h3><i class="fa-solid fa-tags" style="color:#e040fb;"></i> Теги профиля</h3>
               <p style="color:var(--text-muted);font-size:0.88rem;margin-bottom:4px;">Выбери любые теги — отображаются рядом с именем. Можно надеть хоть все сразу.</p>
-              <div class="tags-selector-grid" id="tagsGrid">
+              <div class="tags-selector-grid" id="tagsGrid" data-server-tags='${escapeHtml(JSON.stringify(profile.activeTags || ["BEGINNER"]))}'>
                 ${Object.entries(ALL_TAGS).filter(([tag]) => {
                   if (tag === "ADMIN" && !isAdmin(username)) return false;
                   if (tag === "MODERATOR" && !isModeratorOrAdmin(username)) return false;
@@ -5942,7 +5942,8 @@
                     data-locked="${locked ? "1" : "0"}"
                     data-username="${escapeHtml(username)}"
                     style="color:${info.color};${activeStyle}${specialStyle}${lockedStyle}"
-                    title="${info.desc}">
+                    title="${info.desc}"
+                    onclick="handleTagClick(event, this)">
                     ${info.emoji} ${tag}${locked && !isAdminTag ? " 🔒" : ""}
                   </button>`;
                 }).join("")}
@@ -5970,14 +5971,10 @@
     /* ── Tag selection ───────────────────────────────────────── */
     let _pendingTags = null;
 
-    // Event delegation — fires on any click inside tagsGrid
-    document.addEventListener("click", function(e) {
-      const btn = e.target.closest("[data-tag-btn='1']");
-      if (!btn) return;
+    function handleTagClick(e, btn) {
       if (btn.dataset.locked === "1") {
-        // show shake hint
         btn.style.animation = "none";
-        btn.offsetHeight; // reflow
+        btn.offsetHeight;
         btn.style.animation = "";
         const origText = btn.innerHTML;
         btn.innerHTML = "🔒 Нужен пост на форуме!";
@@ -5988,12 +5985,16 @@
       const username = btn.dataset.username;
       if (!tag || !username) return;
       toggleTag(tag, btn, username);
-    });
+    }
 
     function toggleTag(tag, btn, username) {
       if (_pendingTags === null) {
-        const profile = getUserProfile(username) || {};
-        _pendingTags = [...(profile.activeTags || ["BEGINNER"])];
+        const grid = document.getElementById("tagsGrid");
+        if (grid && grid.dataset.serverTags) {
+          try { _pendingTags = JSON.parse(grid.dataset.serverTags); } catch(e) { _pendingTags = ["BEGINNER"]; }
+        } else {
+          _pendingTags = ["BEGINNER"];
+        }
       }
       const info = ALL_TAGS[tag];
       if (!info) return;
