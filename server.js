@@ -17,13 +17,15 @@ const db = new Database(DB_PATH);
 
 // Async backup to Google Drive after write operations
 function backupDb() {
+  const backupPath = '/tmp/forum-writebackup.db';
   try {
-    const backupPath = '/tmp/forum-writebackup.db';
-    db.exec(`VACUUM INTO '${backupPath}'`);
-    exec(`rclone copyto "${backupPath}" gdrive:osint-forum-backup/latest.db 2>/dev/null`, { timeout: 30000 }, (err) => {
-      if (err) console.error('Backup warning:', err.message);
-    });
-  } catch(e) {}
+    db.backup(backupPath, { progress: false });
+  } catch (e) {
+    try { db.exec(`VACUUM INTO '${backupPath}'`); } catch(e2) { console.error('Backup VACUUM failed:', e2.message); return; }
+  }
+  exec(`rclone copyto "${backupPath}" gdrive:osint-forum-backup/latest.db`, { timeout: 30000 }, (err) => {
+    if (err) console.error('Backup warning:', err.message);
+  });
 }
 
 const app  = express();
@@ -219,10 +221,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use((req, res, next) => {
   req.user = req.session?.user || null;
-  // Check ban for authenticated users
   if (req.user && isBanned(req.user.username)) {
-    req.session.destroy();
-    return res.json({ ok: false, error: 'Ваш аккаунт заблокирован.', banned: true });
+    req.user = null;
+    delete req.session.user;
+    req.session.save(() => {});
+    if (req.path.startsWith('/api/')) {
+      return res.json({ ok: false, error: 'Ваш аккаунт заблокирован.', banned: true });
+    }
   }
   next();
 });
@@ -264,6 +269,7 @@ app.post('/api/auth/login', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE username=? OR email=?')
                  .get(login.toLowerCase(), login.toLowerCase());
   if (!user) return res.json({ ok: false, error: 'Пользователь не найден.' });
+  if (isBanned(user.username)) return res.json({ ok: false, error: 'Ваш аккаунт заблокирован.', banned: true });
   if (user.password_hash !== hashPassword(password))
     return res.json({ ok: false, error: 'Неверный пароль.' });
 
@@ -275,12 +281,13 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 app.get('/api/auth/me', (req, res) => {
-  const u = safeUser(req.user);
-  if (u && isBanned(u.username)) {
-    req.session.destroy();
+  if (req.user && isBanned(req.user.username)) {
+    req.user = null;
+    delete req.session.user;
+    req.session.save(() => {});
     return res.json({ user: null, banned: true });
   }
-  res.json({ user: u });
+  res.json({ user: safeUser(req.user) });
 });
 
 // Cross-device sync: returns all role lists and user tags
@@ -536,9 +543,9 @@ app.post('/api/complaints', (req, res) => {
   const { post_idx, post_topic, target_author, reason, details, source, section } = req.body;
   if (!reason) return res.json({ ok: false, error: 'Укажите причину.' });
   const id = 'c_' + Math.random().toString(36).slice(2, 10);
-  db.prepare(`INSERT INTO complaints (id, post_idx, post_topic, target_author, reason, details, created_by)
-               VALUES (?,?,?,?,?,?,?)`)
-    .run(id, post_idx || 0, post_topic || '', target_author || '', reason, details || '', req.user.username);
+  db.prepare(`INSERT INTO complaints (id, post_idx, post_topic, target_author, reason, details, source, section, created_by)
+               VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(id, post_idx || 0, post_topic || '', target_author || '', reason, details || '', source || 'forum', section || '', req.user.username);
   backupDb();
   res.json({ ok: true, id });
 });
