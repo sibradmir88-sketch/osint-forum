@@ -1,0 +1,8 @@
+node_modules
+.git
+.env
+forum.db
+forum.db-shm
+forum.db-wal
+.gitignore
+*.md
