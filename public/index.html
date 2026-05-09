@@ -5942,8 +5942,7 @@
                     data-locked="${locked ? "1" : "0"}"
                     data-username="${escapeHtml(username)}"
                     style="color:${info.color};${activeStyle}${specialStyle}${lockedStyle}"
-                    title="${info.desc}"
-                    onclick="handleTagClick(event, this)">
+                    title="${info.desc}">
                     ${info.emoji} ${tag}${locked && !isAdminTag ? " 🔒" : ""}
                   </button>`;
                 }).join("")}
@@ -5965,13 +5964,31 @@
             </div>` : ""}
           </div>
         </div>`;
+      attachTagHandlers();
     }
 
     /* ── Avatar actions ──────────────────────────────────────── */
     /* ── Tag selection ───────────────────────────────────────── */
     let _pendingTags = null;
 
-    function handleTagClick(e, btn) {
+    function attachTagHandlers() {
+      const grid = document.getElementById("tagsGrid");
+      if (!grid) return;
+      grid.querySelectorAll("[data-tag-btn='1']").forEach(btn => {
+        btn.removeEventListener("click", onTagBtnClick);
+        btn.addEventListener("click", onTagBtnClick);
+        btn.removeEventListener("touchstart", onTagBtnTouch);
+        btn.addEventListener("touchstart", onTagBtnTouch, { passive: true });
+      });
+    }
+
+    let _tagTouchFired = false;
+    function onTagBtnTouch(e) {
+      _tagTouchFired = true;
+    }
+    function onTagBtnClick(e) {
+      if (_tagTouchFired) { _tagTouchFired = false; return; }
+      const btn = e.currentTarget;
       if (btn.dataset.locked === "1") {
         btn.style.animation = "none";
         btn.offsetHeight;
