@@ -3293,6 +3293,94 @@
     .tag-select-btn.utag-MODERATOR { animation: pulseModeratorV2 2.2s ease-in-out infinite, moderatorShift 4.2s ease-in-out infinite !important; }
     .tag-select-btn.utag-OWNER { animation: pulseOwnerV2 2s ease-in-out infinite, ownerShift 3.8s ease-in-out infinite !important; }
 
+    /* ═══════════════════════════════════════════════════════════
+       RESPONSIVE — ALL DEVICES
+    ═══════════════════════════════════════════════════════════ */
+    @media (max-width: 380px) {
+      .container { width: 100%; padding: 0 10px; }
+      .hero h1 { font-size: clamp(1.6rem, 7vw, 2.2rem); }
+      .hero p { font-size: 0.9rem; }
+      .nav-card { padding: 14px 10px; min-height: 140px; }
+      .auth-modal { padding: 16px 12px; width: 98vw; }
+      .paste-card-header { flex-wrap: wrap; gap: 6px; }
+      .post-card .post-header { flex-wrap: wrap; }
+      .profile-wrap { grid-template-columns: 1fr; }
+      .profile-sidebar { padding: 16px; }
+      .admin-stats-grid { grid-template-columns: 1fr 1fr; }
+      .mod-post-meta { flex-wrap: wrap; }
+      .complaints-page-wrap { padding: 60px 8px; }
+      .forum-type-tabs { flex-direction: column; }
+      .forum-type-tab { width: 100%; justify-content: center; }
+    }
+
+    @media (min-width: 381px) and (max-width: 480px) {
+      .profile-card { padding: 18px 14px; }
+      .tags-selector-grid { grid-template-columns: 1fr 1fr; }
+      .avatar-color-grid { grid-template-columns: repeat(6, 1fr); }
+      .admin-stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .admin-user-row { flex-wrap: wrap; }
+      .admin-tabs { flex-wrap: wrap; }
+      .admin-tab { font-size: 0.78rem; padding: 7px 10px; }
+      .reaction-picker-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    @media (min-width: 481px) and (max-width: 768px) {
+      .profile-main .profile-card { padding: 20px 18px; }
+      .tags-selector-grid { grid-template-columns: repeat(2, 1fr); }
+      .admin-stats-grid { grid-template-columns: repeat(3, 1fr); }
+      .paste-form-row { grid-template-columns: 1fr; }
+      .hero h1 { font-size: clamp(2.4rem, 6vw, 3rem); }
+      .resources, .cards, .manuals-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .resources, .cards, .manuals-grid { grid-template-columns: repeat(2, 1fr); }
+      .paste-form-row { grid-template-columns: 1fr 1fr; }
+      .admin-stats-grid { grid-template-columns: repeat(4, 1fr); }
+      .tags-selector-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @media (min-width: 1025px) and (max-width: 1280px) {
+      .resources, .cards { grid-template-columns: repeat(3, 1fr); }
+      .admin-stats-grid { grid-template-columns: repeat(5, 1fr); }
+      .tags-selector-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    @media (min-width: 1281px) {
+      .tags-selector-grid { grid-template-columns: repeat(5, 1fr); }
+      .admin-stats-grid { grid-template-columns: repeat(5, 1fr); }
+    }
+
+    @media (hover: none) and (pointer: coarse) {
+      .nav-card:hover, .resource-card:hover, .manual-card:hover, .contact-card:hover {
+        transform: none;
+        border-color: var(--border);
+        box-shadow: none;
+      }
+      .nav-card:active, .resource-card:active, .manual-card:active, .contact-card:active {
+        transform: scale(0.97);
+        border-color: rgba(139, 92, 246, 0.6);
+      }
+      .post-menu-btn:hover { background: transparent; border-color: rgba(255,255,255,0.1); color: var(--text-muted); }
+      .reaction-btn:hover { transform: none; background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    @media print {
+      .header, .footer, .back-btn, .menu-btn, .nav-links, .reply-form-wrap,
+      .paste-reply-form, .reactions-bar, .post-menu-wrap {
+        display: none !important;
+      }
+      body { background: white; color: black; }
+      .container { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -3733,7 +3821,7 @@
         <label>Причина жалобы</label>
         <select id="complaintReason" class="paste-form-select">
           <option value="">— Выбрать причину —</option>
-          <option value="Доксинг — раскрытие личных данных без согласия">Доксинг — раскрытие личных данных без согласия</option>
+          <option value="Доксинг — раскрытие личных данных без согласия (DOX)">Доксинг — раскрытие личных данных без согласия (DOX)</option>
           <option value="Оскорбления, грубость, переход на личности">Оскорбления, грубость, переход на личности</option>
           <option value="Спам / реклама / флуд">Спам / реклама / флуд</option>
           <option value="Сватиканг — публикация непроверенных обвинений">Сватиканг — публикация непроверенных обвинений</option>
@@ -3741,6 +3829,8 @@
           <option value="Плагиат — выдача чужих исследований за свои">Плагиат — выдача чужих исследований за свои</option>
           <option value="Взлом / фишинг / незаконная деятельность">Взлом / фишинг / незаконная деятельность</option>
           <option value="Реклама услуг в чужих темах">Реклама услуг в чужих темах</option>
+          <option value="Призывы к насилию / экстремизм">Призывы к насилию / экстремизм</option>
+          <option value="Обход блокировки (мультиаккаунт)">Обход блокировки (мультиаккаунт)</option>
           <option value="Другое нарушение">Другое нарушение</option>
         </select>
       </div>
@@ -5382,7 +5472,7 @@
     /* All possible tags */
     const ALL_TAGS = {
       "BEGINNER":   { emoji:"🔰", color:"#90caf9", unlockMode:"auto",  desc:"Выдаётся при регистрации" },
-      "OSINT'ER":   { emoji:"⚡", color:"#e040fb", unlockMode:"forum", desc:"Выдаётся за первый пост на форуме" },
+      "OSINT'ER":   { emoji:"⚡", color:"#e040fb", unlockMode:"free", desc:"Тег OSINT-специалиста — выберите в профиле" },
       "ADMIN":      { emoji:"⚡", color:"#ff2222", unlockMode:"admin", desc:"Только для администраторов" },
       "MODERATOR":  { emoji:"🛡️", color:"#7e22ce", unlockMode:"admin", desc:"Тег для модераторов" },
       "OWNER":      { emoji:"👑", color:"#f59e0b", unlockMode:"admin", desc:"Тег владельца сообщества" },
@@ -7621,32 +7711,6 @@
 
         // Sync to server
         savePasteToServer(newPaste).catch(() => {});
-
-        // Auto-unlock OSINT'ER tag on first non-anonymous post
-        if (!anonymous && session && session.username) {
-          const users = getUsers();
-          const key = session.username.toLowerCase();
-          if (users[key]) {
-            const tags = users[key].activeTags || ["BEGINNER"];
-            if (!tags.includes("OSINT'ER")) {
-              tags.push("OSINT'ER");
-              users[key].activeTags = tags;
-              appCache.users = users;
-              fetch('/api/users/me', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ active_tags: tags }),
-              }).catch(() => {});
-              const statusEl2 = document.getElementById("forumPostStatus");
-              if (statusEl2) {
-                setTimeout(() => {
-                  statusEl2.textContent = "⚡ Тег OSINT'ER разблокирован! Добавьте его в профиле.";
-                  statusEl2.style.color = "#e040fb";
-                }, 1800);
-              }
-            }
-          }
-        }
 
         // Reset form but keep type
         const currentType = type;

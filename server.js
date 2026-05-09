@@ -28,6 +28,48 @@ function backupDb() {
   });
 }
 
+// ── Session table ────────────────────────────────────────
+db.exec(`CREATE TABLE IF NOT EXISTS sessions (
+  sid      TEXT PRIMARY KEY,
+  data     TEXT NOT NULL,
+  expired  TEXT NOT NULL
+)`);
+
+// ── SQLite session store (persists across restarts) ──────
+const util = require('util');
+function SQLiteStore() {
+  session.Store.call(this);
+}
+util.inherits(SQLiteStore, session.Store);
+SQLiteStore.prototype.get = function(sid, cb) {
+  try {
+    const row = db.prepare("SELECT data FROM sessions WHERE sid=? AND expired>datetime('now')").get(sid);
+    cb(null, row ? JSON.parse(row.data) : null);
+  } catch(e) { cb(e); }
+};
+SQLiteStore.prototype.set = function(sid, session, cb) {
+  try {
+    const maxAge = session.cookie?.maxAge || 7*24*3600*1000;
+    const expired = new Date(Date.now() + maxAge).toISOString();
+    db.prepare("INSERT OR REPLACE INTO sessions (sid, data, expired) VALUES (?,?,?)").run(sid, JSON.stringify(session), expired);
+    cb(null);
+  } catch(e) { cb(e); }
+};
+SQLiteStore.prototype.destroy = function(sid, cb) {
+  try {
+    db.prepare("DELETE FROM sessions WHERE sid=?").run(sid);
+    cb(null);
+  } catch(e) { cb(e); }
+};
+SQLiteStore.prototype.touch = function(sid, session, cb) {
+  try {
+    const maxAge = session.cookie?.maxAge || 7*24*3600*1000;
+    const expired = new Date(Date.now() + maxAge).toISOString();
+    db.prepare("UPDATE sessions SET expired=? WHERE sid=?").run(expired, sid);
+    cb(null);
+  } catch(e) { cb(e); }
+};
+
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
@@ -213,6 +255,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
   secret           : CONFIG.sessionSecret,
+  store            : new SQLiteStore(),
   resave           : false,
   saveUninitialized: false,
   cookie           : { maxAge: 7 * 24 * 3600 * 1000, sameSite: 'lax' },
