@@ -5879,9 +5879,7 @@
                   const isAdminTag = tag === "ADMIN";
                   const isModeratorTag = tag === "MODERATOR";
                   const isOwnerTag = tag === "OWNER";
-                  const isOsinterTag = tag === "OSINT'ER";
-                  const forumDone = hasPostedOnForum(username);
-                  const lockReason = isAdminTag || isModeratorTag || isOwnerTag ? !canToggleTag(tag, username) : (isOsinterTag && !forumDone);
+                  const lockReason = (isAdminTag || isModeratorTag || isOwnerTag) && !canToggleTag(tag, username);
                   const locked = Boolean(lockReason);
                   const active = (profile.activeTags || ["BEGINNER"]).includes(tag);
                   const activeStyle = active
@@ -5907,7 +5905,6 @@
                   </button>`;
                 }).join("")}
               </div>
-              ${!hasPostedOnForum(username) ? `<div class="tag-locked-hint">🔒 OSINT'ER — напиши первое сообщение на форуме чтобы разблокировать</div>` : ""}
               ${isAdmin(username) ? `<div class="tag-locked-hint" style="color:#ff4444;text-shadow:0 0 6px rgba(255,0,0,0.4);">⚡ Тег ADMIN можно снять/надеть вручную</div>` : ""}
               <button class="profile-save-btn" style="margin-top:14px;" onclick="saveTagsSelection('${username}')">
                 <i class="fa-solid fa-floppy-disk"></i> Сохранить теги
