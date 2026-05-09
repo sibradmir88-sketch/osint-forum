@@ -5800,9 +5800,13 @@
           <div class="admin-section-title"><i class="fa-solid fa-flag"></i> Жалобы (${complaints.length})</div>
           <div style="display:grid;gap:12px;">
             ${complaints.map(c => {
+              const cre = c.created_by || c.createdBy;
+              const dat = c.created_at || c.date;
+              const top = c.post_topic || c.postTopic;
+              const aut = c.target_author || c.targetAuthor;
               return `<div class="mod-post-card status-${c.status}">
-                <div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(c.createdBy)}</span><span class="mod-post-date">${new Date(c.date).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span>${c.source && c.source !== 'forum' ? `<span style="font-size:0.7rem;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:1px 6px;margin-left:6px;">${escapeHtml(c.source)}</span>` : ''}</div>
-                <div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(c.postTopic)}<br><strong>Раздел:</strong> ${escapeHtml(c.section || c.source || 'форум')}<br><strong>Автор:</strong> ${escapeHtml(c.targetAuthor)}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}<br>${c.details ? `<div style="margin-top:10px;">${escapeHtml(c.details)}</div>` : ''}</div>
+                <div class="mod-post-meta"><span class="mod-post-author">@${escapeHtml(cre || '')}</span><span class="mod-post-date">${new Date(dat || Date.now()).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span class="mod-status-badge ${c.status}">${c.status==='new'?'Новое':c.status==='read'?'Прочитано':c.status==='pending'?'На рассмотрении':'Решено'}</span>${c.source && c.source !== 'forum' ? `<span style="font-size:0.7rem;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:1px 6px;margin-left:6px;">${escapeHtml(c.source)}</span>` : ''}</div>
+                <div class="mod-post-text"><strong>Тема:</strong> ${escapeHtml(top || '')}<br><strong>Раздел:</strong> ${escapeHtml(c.section || c.source || 'форум')}<br><strong>Автор:</strong> ${escapeHtml(aut || '')}<br><strong>Причина:</strong> ${escapeHtml(c.reason)}<br>${c.details ? `<div style="margin-top:10px;">${escapeHtml(c.details)}</div>` : ''}</div>
                 <div class="mod-post-actions">
                   <button class="admin-btn ok" onclick="setComplaintStatus('${c.id}','read')"><i class="fa-solid fa-eye"></i> Прочитано</button>
                   <button class="admin-btn warn" onclick="setComplaintStatus('${c.id}','pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button>
