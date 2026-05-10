@@ -1665,8 +1665,9 @@
     }
 
     /* ══ SPACING FIXES ══ */
-    .mod-post-actions { display: flex; flex-wrap: wrap; gap: 2cm; row-gap: 12px; margin-top: 12px; }
-    .thread-actions { display: flex; flex-wrap: wrap; gap: 2cm; row-gap: 12px; margin-top: 12px; }
+    .mod-post-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+    .thread-actions { display: flex; flex-wrap: wrap; gap: 12px; row-gap: 12px; margin-top: 12px; }
+    .thread-replies { margin-top: 28px; }
     .paste-card { margin-bottom: 16px; }
     .paste-replies { margin-top: 12px; padding-top: 12px; }
     .paste-card-header { gap: 10px; }
@@ -5746,7 +5747,7 @@
             <span>${replies.length} ${replies.length===1? 'ответ':'ответов'}</span>
           </div>
           ${threadActions}
-          ${(isAdm || isOwn) ? `<button class="admin-btn danger" onclick="deleteThreadFromPage(${threadId})" style="margin-top:8px;"><i class="fa-solid fa-trash"></i> Удалить тему</button>` : ''}
+          ${(isAdm || isOwn) ? `<button class="admin-btn danger" onclick="deleteThreadFromPage(${threadId})" style="margin-top:14px;margin-bottom:12px;"><i class="fa-solid fa-trash"></i> Удалить тему</button>` : ''}
         </div>
         <div class="thread-card" id="thread-card-${threadId}">
           <div class="paste-card-header">
