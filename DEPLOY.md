@@ -1,143 +1,118 @@
-# 🚀 OSINT Forum — Деплой и настройка
+# 🚀 OSINT Forum — Production Deployment (24/7, Бесплатно)
 
-## ✅ Что было добавлено
+## 📦 Быстрый старт на Railway (бесплатно, 24/7)
 
-### 1. Система тегов (13 тегов)
-| Тег | Как получить | Цвет |
-|-----|-------------|------|
-| 🔰 BEGINNER | Автоматически при регистрации | Синий |
-| ⚡ OSINT'ER | После первого поста на форуме | Фиолетовый (мигает) |
-| 👑 ADMIN | Только через админ-панель | Красный (мигает) |
-| 🌍 GEOINT'ER | Свободный выбор в профиле | Зелёный |
-| 💻 CSINT'ER | Свободный выбор | Синий |
-| 🕵️ HUMINT'ER | Свободный выбор | Розовый |
-| 📡 SIGINT'ER | Свободный выбор | Жёлтый |
-| 🛰️ IMINT'ER | Свободный выбор | Голубой |
-| ⚗️ MASINT'ER | Свободный выбор | Сиреневый |
-| 🔓 CYBINT'ER | Свободный выбор (мигает) | Зелёный неон |
-| ⚙️ TECHINT'ER | Свободный выбор | Золотой |
-| 💰 FININT'ER | Свободный выбор | Циан |
-| 📱 SOCMINT'ER | Свободный выбор | Розово-малиновый |
+### Шаг 1: Подготовка репозитория
+```bash
+cd /home/radmir/osint-forum
 
-- Теги отображаются рядом с никнеймом везде на сайте
-- Можно выбрать несколько тегов одновременно
-- Выбор тегов — в настройках профиля
+# Убедись, что .env НЕ попадёт в git
+echo ".env" >> .gitignore
+echo "forum.db" >> .gitignore
 
-### 2. Админ-панель
-- Доступ только у юзернеймов из списка администраторов
-- Предустановлены: **@illuminatov** и **@detailing**
-- Панель показывает статистику, список пользователей, управление админами
-- Ссылка "⚡ Админ" в навбаре появляется только у администраторов
+# Сделай коммит
+git add .
+git commit -m "Production-ready: crash handlers, health check, Dockerfile"
+git push
+```
 
-### 3. SQL база данных (SQLite)
-- Файл `forum.db` — полноценная SQL база, не localStorage
-- Хранит всех пользователей, посты, теги, администраторов
-- Работает через бэкенд `server.js` (Node.js + Express)
+### Шаг 2: Деплой на Railway
 
-### 4. OAuth (уже готов в коде!)
-- Google OAuth и VK OAuth уже написаны
-- Нужно только вставить ключи (см. ниже)
+1. Зайди на [Railway.app](https://railway.app) → GitHub login
+2. Нажми **New Project** → **Deploy from GitHub repo**
+3. Выбери `sibradmir88-sketch/osint-forum`
+4. После деплоя перейди в **Settings** → **Domains**:
+   - Добавь кастомный домен: **osintforum.net**
+   - Если домена пока нет, Railway даст бесплатный `*.up.railway.app`
+5. Перейди в **Settings** → **Volumes**:
+   - Нажми **Add Volume**
+   - Mount path: `/data`
+   - Размер: 1 GB (бесплатно)
+6. Перейди в **Variables** → добавь:
+   ```
+   SESSION_SECRET=osint_forum_sup3r_s3cr3t_k3y_2024_xyz_42!
+   NODE_ENV=production
+   PORT=3000
+   ```
 
----
+### Шаг 3: Проверка
 
-## 🛠️ Запуск локально
+Открой `https://osintforum.net/health` — должен ответить:
+```json
+{ "status": "ok", "uptime": 123, "db": "connected" }
+```
+
+## 🔥 Как работает защита от крашей
+
+### 1. Обработка глобальных ошибок (`server.js`)
+```js
+process.on('uncaughtException', (err) => {
+  console.error(err);
+  // НЕ завершаем процесс — продолжаем работать
+});
+process.on('unhandledRejection', (reason) => {
+  console.error(reason);
+  // НЕ завершаем процесс — продолжаем работать
+});
+```
+
+### 2. Health check endpoint
+Railway每隔30s проверяет `/health`. Если ответ не 200 — Railway перезапускает контейнер.
+
+### 3. Graceful shutdown
+При SIGTERM/SIGINT (рестарт, деплой) — БД корректно закрывается перед выходом.
+
+### 4. Docker + tini
+- Используется `tini` как init-процесс (правильно обрабатывает сигналы)
+- `HEALTHCHECK` в Dockerfile
+
+### 5. Volume для БД
+База данных хранится на постоянном Volume (`/data/forum.db`), а не в контейнере.
+При редеплое данные НЕ теряются.
+
+## 🗄️ Всё в SQL, никакого localStorage
+
+- Все пользователи, посты, теги, реакции, просмотры — в SQLite
+- Сессии хранятся в SQLite (не в памяти)
+- Тема оформления — на сервере (в БД)
+- При входе с любого устройства — все данные синхронизируются
+
+## 🌐 Поддержка всех устройств
+
+- iOS Safari — корректная работа
+- Android Chrome — корректная работа
+- iPad — планшетная верстка
+- Windows/macOS/Linux — десктоп
+
+## 📊 Мониторинг (бесплатно)
+
+- **Railway Dashboard** — логи, метрики, статус
+- **Health check** — `/health` endpoint
+- **UptimeRobot** (uptimerobot.com) — бесплатный мониторинг 24/7
+
+## 🛠 Локальный запуск
 
 ```bash
-cd osint-forum
+cd /home/radmir/osint-forum
 npm install
 node server.js
 # Открой http://localhost:3000
 ```
 
----
+## 🔄 Обновление
 
-## ☁️ Бесплатный хостинг — Railway.app (рекомендую)
-
-**Railway** — лучший вариант: бесплатный план, Node.js, SQLite, почти 24/7.
-
-### Шаги:
-1. Зарегистрируйся на [railway.app](https://railway.app)
-2. Создай проект → "Deploy from GitHub repo"
-3. Загрузи папку `osint-forum` на GitHub (приватный репозиторий)
-4. Подключи репозиторий к Railway
-5. В настройках Railway → Variables добавь:
-   ```
-   SESSION_SECRET=какой_то_длинный_секрет_32символа
-   BASE_URL=https://твой-проект.up.railway.app
-   PORT=3000
-   ```
-6. Railway автоматически запустит `node server.js`
-7. Твой сайт будет доступен по адресу `https://твой-проект.up.railway.app`
-
-### Домен
-- Бесплатно: `osintforum.up.railway.app`
-- Платно: `osintforum.ru` (~150 руб/год на reg.ru) → подключается в настройках Railway
-
----
-
-## 🔑 OAuth — Google
-
-1. Перейди на [console.cloud.google.com](https://console.cloud.google.com)
-2. Создай проект → APIs & Services → Credentials
-3. Create OAuth 2.0 Client ID (Web application)
-4. Authorized redirect URI: `https://твой-домен/auth/google/callback`
-5. Скопируй Client ID и Client Secret
-6. В Railway Variables добавь:
-   ```
-   GOOGLE_CLIENT_ID=твой_client_id
-   GOOGLE_CLIENT_SECRET=твой_client_secret
-   ```
-
----
-
-## 🔑 OAuth — VK
-
-1. Перейди на [vk.com/dev](https://vk.com/dev)
-2. Создай приложение (Сайт)
-3. Базовый домен: твой домен
-4. Redirect URL: `https://твой-домен/auth/vk/callback`
-5. Скопируй ID приложения и защищённый ключ
-6. В Railway Variables добавь:
-   ```
-   VK_APP_ID=12345678
-   VK_APP_SECRET=твой_секрет
-   ```
-
----
-
-## 🗃️ База данных — где хранится
-
-- Локально: файл `forum.db` в папке проекта
-- На Railway: файл живёт на сервере (сбрасывается при передеплое!)
-- **Для постоянного хранения на Railway** → подключи Railway PostgreSQL (бесплатно):
-  - Dashboard → New → Database → PostgreSQL
-  - Или используй **PlanetScale** (бесплатный MySQL/PostgreSQL)
-
-### Альтернатива — Supabase (бесплатная PostgreSQL навсегда)
-1. [supabase.com](https://supabase.com) → New project
-2. Получи `DATABASE_URL`
-3. Замени `better-sqlite3` на `pg` (потребует небольшой рефактор server.js)
-
----
-
-## 📁 Структура проекта
-
-```
-osint-forum/
-├── server.js          ← бэкенд (Node.js + Express + SQLite)
-├── forum.db           ← база данных SQLite
-├── package.json
-├── .env               ← секреты (не заливай на GitHub!)
-├── .env.example       ← шаблон для секретов
-├── public/
-│   └── index.html     ← весь фронтенд (SPA)
-└── DEPLOY.md          ← этот файл
+```bash
+cd /home/radmir/osint-forum
+git add .
+git commit -m "fix: что-то починил"
+git push
+# Railway автоматически передеплоит
 ```
 
----
+## 🆘 Если что-то пошло не так
 
-## ❗ ВАЖНО — безопасность
-
-- Никогда не заливай `.env` на GitHub!
-- Добавь `.env` в `.gitignore`
-- Используй переменные окружения Railway для секретов
+1. Проверь логи в Railway Dashboard → **Deployments** → **View Logs**
+2. Проверь `/health` endpoint
+3. Убедись, что Volume примонтирован (`/data`)
+4. Если БД повреждена — восстанови из бекапа
+5. Если ничего не помогло — удали Volume и создай новый

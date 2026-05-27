@@ -1,8 +1,8 @@
 name: osint-forum
 runtime: node
-version: 20
-build: npm install
-start: npm start
+version: 22
+build: npm ci
+start: node server.js
 port: 3000
-healthcheck: /
+healthcheck: /health
 auto_deploy: true

@@ -1,7 +1,21 @@
+// ═══════════════════════════════════════════════════════════════
+// OSINT Forum — Production Server (bulletproof edition)
+// ═══════════════════════════════════════════════════════════════
+
 console.log("=== OSINT Forum starting ===");
 console.log("CWD:", process.cwd());
 console.log("PORT:", process.env.PORT);
 console.log("NODE_ENV:", process.env.NODE_ENV);
+
+// ── Global crash handlers (never die) ──────────────────────────
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err.message, err.stack);
+  // Don't exit — keep serving
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  // Don't exit — keep serving
+});
 
 require("dotenv").config();
 const express       = require('express');
@@ -11,21 +25,35 @@ const path          = require('path');
 const fs = require('fs');
 const crypto        = require('crypto');
 const { exec } = require('child_process');
-const DB_PATH = fs.existsSync('/data') ? '/data/forum.db' : 'forum.db';
 
-const db = new Database(DB_PATH);
+// ── Database path (use Railway volume if available) ────────────
+const DB_PATH = fs.existsSync('/data') ? '/data/forum.db' : 'forum.db';
+console.log("DB_PATH:", DB_PATH);
+
+let db;
+try {
+  db = new Database(DB_PATH);
+} catch (err) {
+  console.error('FATAL: Cannot open database at', DB_PATH, err.message);
+  process.exit(1);
+}
 
 // Async backup to Google Drive after write operations
 function backupDb() {
-  const backupPath = '/tmp/forum-writebackup.db';
   try {
-    db.backup(backupPath, { progress: false });
+    const backupPath = '/tmp/forum-writebackup.db';
+    try {
+      db.backup(backupPath, { progress: false });
+    } catch (e) {
+      try { db.exec(`VACUUM INTO '${backupPath}'`); } catch(e2) { console.error('Backup VACUUM failed:', e2.message); return; }
+    }
+    // Non-blocking rclone — never crash the app
+    exec(`rclone copyto "${backupPath}" gdrive:osint-forum-backup/latest.db`, { timeout: 30000 }, (err) => {
+      if (err) console.error('Backup warning (non-fatal):', err.message);
+    });
   } catch (e) {
-    try { db.exec(`VACUUM INTO '${backupPath}'`); } catch(e2) { console.error('Backup VACUUM failed:', e2.message); return; }
+    console.error('Backup error (non-fatal):', e.message);
   }
-  exec(`rclone copyto "${backupPath}" gdrive:osint-forum-backup/latest.db`, { timeout: 30000 }, (err) => {
-    if (err) console.error('Backup warning:', err.message);
-  });
 }
 
 // ── Session table ────────────────────────────────────────
@@ -875,14 +903,41 @@ app.post('/api/admin/backup', (req, res) => {
   res.json({ ok: true, message: 'Backup started to Google Drive' });
 });
 
+// ── Health check endpoint (for Railway load balancer) ────────────
+app.get('/health', (req, res) => {
+  try {
+    // Quick DB check
+    db.prepare('SELECT 1').get();
+    res.json({ status: 'ok', uptime: process.uptime(), db: 'connected' });
+  } catch (e) {
+    res.status(503).json({ status: 'error', message: e.message });
+  }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// ── Graceful shutdown ───────────────────────────────────────────
+function shutdown(signal) {
+  console.log(`\nReceived ${signal}, shutting down gracefully...`);
+  db.close();
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+
+// ── Start server ────────────────────────────────────────────────
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`OSINT Forum запущен на порту ${PORT}`);
   console.log(`Локально: http://localhost:${PORT}`);
   // Periodic backup every 5 minutes
   setInterval(backupDb, 5 * 60 * 1000);
 });
+
+// Server-level error handling
+server.on('error', (err) => {
+  console.error('Server error:', err.message);
+});
+
 console.log("=== Server module loaded ===");
