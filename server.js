@@ -30,6 +30,18 @@ const { exec } = require('child_process');
 const DB_PATH = fs.existsSync('/data') ? '/data/forum.db' : 'forum.db';
 console.log("DB_PATH:", DB_PATH);
 
+// Fix permissions if needed (Railway volume may have restrictive perms)
+try {
+  if (fs.existsSync(DB_PATH)) {
+    fs.chmodSync(DB_PATH, 0o666);
+  }
+  if (fs.existsSync('/data')) {
+    fs.chmodSync('/data', 0o777);
+  }
+} catch (e) {
+  console.log('Permission fix (non-fatal):', e.message);
+}
+
 let db;
 try {
   db = new Database(DB_PATH);

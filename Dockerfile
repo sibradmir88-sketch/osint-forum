@@ -9,7 +9,7 @@ RUN apk add --no-cache python3 make g++ libatomic
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --only=production 2>/dev/null || npm ci
+RUN npm ci
 
 COPY . .
 
@@ -22,13 +22,11 @@ WORKDIR /app
 
 COPY --from=build /app /app
 
-# Create data directory for Railway volume
-RUN mkdir -p /data && chmod 777 /data && chown -R node:node /data /app
+# Create data directory for Railway volume + fix permissions
+RUN mkdir -p /data && chmod 777 /data /app
 
 # Use tini as init (reaps zombies, forwards signals)
 ENTRYPOINT ["/sbin/tini", "--"]
-
-USER node
 
 EXPOSE 3000
 
