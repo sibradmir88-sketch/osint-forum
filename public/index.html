@@ -3559,7 +3559,7 @@
           <span class="nav-separator" aria-hidden="true"></span>
           <a class="nav-link" id="navComplaintsLink" href="/complaints" data-route="complaints" style="display:none;">Жалобы</a>
           <span class="nav-separator" aria-hidden="true"></span>
-          <a class="nav-link" id="navMutesLink" href="/mutes" data-route="mutes" style="display:none;">🔇 Муты</a>
+          <a class="nav-link" id="navMutesLink" href="/mutes" data-route="mutes" style="display:none;">Муты</a>
           <span class="nav-separator" aria-hidden="true"></span>
           <a class="nav-link" href="/usersearch" data-route="usersearch">Люди</a>
           <a class="nav-link" href="/admin" data-route="admin" id="navAdminLink" style="display:none;color:#ff4444;">⚡ Админ</a>
@@ -6024,11 +6024,13 @@
       document.getElementById('muteError').style.display = 'none';
       document.getElementById('muteSuccess').textContent = '';
       document.getElementById('muteSuccess').style.display = 'none';
-      document.getElementById('muteOverlay').style.display = 'flex';
+      document.getElementById('muteOverlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
     };
 
     window.closeMuteModal = function() {
-      document.getElementById('muteOverlay').style.display = 'none';
+      document.getElementById('muteOverlay').classList.remove('open');
+      document.body.style.overflow = '';
     };
 
     // Close on overlay click and Escape
@@ -6036,7 +6038,7 @@
       if (e.target === this) closeMuteModal();
     });
     document.addEventListener('keydown', function muteEsc(e) {
-      if (e.key === 'Escape' && document.getElementById('muteOverlay')?.style.display === 'flex') {
+      if (e.key === 'Escape' && document.getElementById('muteOverlay')?.classList.contains('open')) {
         closeMuteModal();
       }
     });
