@@ -210,6 +210,14 @@ db.exec(`
     username   TEXT    PRIMARY KEY,
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS chief_moderators (
+    username   TEXT    PRIMARY KEY,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS deputy_chief_moderators (
+    username   TEXT    PRIMARY KEY,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE TABLE IF NOT EXISTS owners (
     username   TEXT    PRIMARY KEY,
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -294,6 +302,20 @@ function isModerator(username) {
 function isOwner(username) {
   if (!username) return false;
   return !!db.prepare("SELECT username FROM owners WHERE username=?").get(username.toLowerCase());
+}
+function isChiefModerator(username) {
+  if (!username) return false;
+  return !!db.prepare("SELECT username FROM chief_moderators WHERE username=?").get(username.toLowerCase());
+}
+function isDeputyChiefModerator(username) {
+  if (!username) return false;
+  return !!db.prepare("SELECT username FROM deputy_chief_moderators WHERE username=?").get(username.toLowerCase());
+}
+function isStaff(username) {
+  return isOwner(username) || isAdmin(username) || isChiefModerator(username) || isDeputyChiefModerator(username) || isModerator(username);
+}
+function isStaffWithBan(username) {
+  return isOwner(username) || isAdmin(username) || isChiefModerator(username) || isDeputyChiefModerator(username);
 }
 function isBanned(username) {
   if (!username) return false;
@@ -408,17 +430,21 @@ app.get('/api/auth/me', (req, res) => {
 app.get('/api/sync/init', (req, res) => {
   const admins = db.prepare('SELECT username FROM admin_usernames').all().map(r => r.username);
   const moderators = db.prepare('SELECT username FROM moderators').all().map(r => r.username);
+  const chiefModerators = db.prepare('SELECT username FROM chief_moderators').all().map(r => r.username);
+  const deputyChiefModerators = db.prepare('SELECT username FROM deputy_chief_moderators').all().map(r => r.username);
   const owners = db.prepare('SELECT username FROM owners').all().map(r => r.username);
   const userRows = db.prepare('SELECT username, active_tags FROM users').all();
   const userTags = {};
   userRows.forEach(u => { userTags[u.username] = JSON.parse(u.active_tags || '["BEGINNER"]'); });
-  res.json({ ok: true, admins, moderators, owners, userTags });
+  res.json({ ok: true, admins, moderators, chiefModerators, deputyChiefModerators, owners, userTags });
 });
 
 // Full sync: returns EVERYTHING the frontend needs — no localStorage required
 app.get('/api/sync/full', (req, res) => {
   const admins = db.prepare('SELECT username FROM admin_usernames').all().map(r => r.username);
   const moderators = db.prepare('SELECT username FROM moderators').all().map(r => r.username);
+  const chiefModerators = db.prepare('SELECT username FROM chief_moderators').all().map(r => r.username);
+  const deputyChiefModerators = db.prepare('SELECT username FROM deputy_chief_moderators').all().map(r => r.username);
   const owners = db.prepare('SELECT username FROM owners').all().map(r => r.username);
   const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 500').all();
   const banned = db.prepare('SELECT username FROM banned_users').all().map(r => r.username);
@@ -453,7 +479,7 @@ app.get('/api/sync/full', (req, res) => {
     `).all(sp.id);
     return { ...sp, replies };
   });
-  res.json({ ok: true, admins, moderators, owners, complaints, banned, muted, users, reactions, views, threads: threadsWithReplies, sections: sectionsWithReplies });
+  res.json({ ok: true, admins, moderators, chiefModerators, deputyChiefModerators, owners, complaints, banned, muted, users, reactions, views, threads: threadsWithReplies, sections: sectionsWithReplies });
 });
 
 app.get('/api/threads', (req, res) => {
@@ -511,7 +537,7 @@ app.delete('/api/threads/:id', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
   const thread = db.prepare('SELECT * FROM threads WHERE id=?').get(req.params.id);
   if (!thread) return res.json({ ok: false, error: 'Тема не найдена.' });
-  const canDelete = isAdmin(req.user.username) || isModerator(req.user.username) || (thread.author_id === req.user.id);
+  const canDelete = isStaff(req.user.username) || (thread.author_id === req.user.id);
   if (!canDelete) return res.json({ ok: false, error: 'Нет прав.' });
   db.prepare('DELETE FROM threads WHERE id=?').run(req.params.id);
   backupDb();
@@ -523,7 +549,7 @@ app.delete('/api/threads/:id/replies/:replyId', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
   const reply = db.prepare('SELECT * FROM replies WHERE id=?').get(req.params.replyId);
   if (!reply) return res.json({ ok: false, error: 'Ответ не найден.' });
-  const canDelete = isAdmin(req.user.username) || isModerator(req.user.username) || (reply.author_id === req.user.id);
+  const canDelete = isStaff(req.user.username) || (reply.author_id === req.user.id);
   if (!canDelete) return res.json({ ok: false, error: 'Нет прав.' });
   db.prepare('DELETE FROM replies WHERE id=?').run(req.params.replyId);
   backupDb();
@@ -544,7 +570,7 @@ app.patch('/api/threads/:id/pin', (req, res) => {
 // ── Set thread status ────────────────────────────────────────────
 app.patch('/api/threads/:id/status', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  if (!isAdmin(req.user.username) && !isModerator(req.user.username))
+  if (!isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const { status } = req.body;
   if (!['new', 'read', 'pending'].includes(status))
@@ -615,7 +641,7 @@ app.delete('/api/sections/:section/:postId', (req, res) => {
   const post = db.prepare('SELECT * FROM section_posts WHERE id=?').get(req.params.postId);
   if (!post) return res.json({ ok: false, error: 'Пост не найден.' });
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  const canDelete = isAdmin(req.user.username) || isModerator(req.user.username) || (post.author_id === req.user.id);
+  const canDelete = isStaff(req.user.username) || (post.author_id === req.user.id);
   if (!canDelete) return res.json({ ok: false, error: 'Нет прав.' });
   db.prepare('DELETE FROM section_posts WHERE id=?').run(req.params.postId);
   backupDb();
@@ -626,7 +652,7 @@ app.delete('/api/sections/:section/:postId/replies/:replyId', (req, res) => {
   const reply = db.prepare('SELECT * FROM section_replies WHERE id=?').get(req.params.replyId);
   if (!reply) return res.json({ ok: false, error: 'Ответ не найден.' });
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  const canDelete = isAdmin(req.user.username) || isModerator(req.user.username) || (reply.author_id === req.user.id);
+  const canDelete = isStaff(req.user.username) || (reply.author_id === req.user.id);
   if (!canDelete) return res.json({ ok: false, error: 'Нет прав.' });
   db.prepare('DELETE FROM section_replies WHERE id=?').run(req.params.replyId);
   backupDb();
@@ -674,7 +700,7 @@ app.post('/api/complaints', (req, res) => {
 
 app.get('/api/complaints', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  if (!isAdmin(req.user.username) && !isModerator(req.user.username))
+  if (!isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 500').all();
   res.json({ ok: true, complaints });
@@ -682,7 +708,7 @@ app.get('/api/complaints', (req, res) => {
 
 app.patch('/api/complaints/:id', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  if (!isAdmin(req.user.username) && !isModerator(req.user.username))
+  if (!isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const { status } = req.body;
   db.prepare('UPDATE complaints SET status=? WHERE id=?').run(status || 'new', req.params.id);
@@ -692,7 +718,7 @@ app.patch('/api/complaints/:id', (req, res) => {
 
 app.delete('/api/complaints/:id', (req, res) => {
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  if (!isAdmin(req.user.username) && !isModerator(req.user.username))
+  if (!isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   db.prepare('DELETE FROM complaints WHERE id=?').run(req.params.id);
   backupDb();
@@ -701,7 +727,7 @@ app.delete('/api/complaints/:id', (req, res) => {
 
 // ── Ban / Unban ──────────────────────────────────────────────
 app.post('/api/admin/bans', (req, res) => {
-  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  if (!req.user || !isStaffWithBan(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const { username } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
   const clean = username.toLowerCase().replace(/^@/, '');
@@ -711,7 +737,7 @@ app.post('/api/admin/bans', (req, res) => {
 });
 
 app.delete('/api/admin/bans/:username', (req, res) => {
-  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  if (!req.user || !isStaffWithBan(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM banned_users WHERE username=?').run(clean);
   backupDb();
@@ -720,14 +746,14 @@ app.delete('/api/admin/bans/:username', (req, res) => {
 
 // ── Mute / Unmute ────────────────────────────────────────────
 app.get('/api/admin/mutes', (req, res) => {
-  if (!req.user || !isModerator(req.user.username) && !isAdmin(req.user.username))
+  if (!req.user || !isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const mutes = db.prepare('SELECT * FROM muted_users ORDER BY created_at DESC').all();
   res.json({ ok: true, mutes });
 });
 
 app.post('/api/admin/mutes', (req, res) => {
-  if (!req.user || !isModerator(req.user.username) && !isAdmin(req.user.username))
+  if (!req.user || !isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const { username, expires_at, reason } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
@@ -739,7 +765,7 @@ app.post('/api/admin/mutes', (req, res) => {
 });
 
 app.delete('/api/admin/mutes/:username', (req, res) => {
-  if (!req.user || !isModerator(req.user.username) && !isAdmin(req.user.username))
+  if (!req.user || !isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM muted_users WHERE username=?').run(clean);
@@ -906,6 +932,76 @@ app.delete('/api/admin/owners/:username', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Chief Moderator management ──────────────────────────────────
+app.get('/api/admin/chief-moderators', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  res.json({ ok: true, chiefModerators: db.prepare('SELECT username FROM chief_moderators').all().map(r => r.username) });
+});
+
+app.post('/api/admin/chief-moderators', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const { username } = req.body;
+  if (!username) return res.json({ ok: false, error: 'Укажите username.' });
+  const clean = username.toLowerCase().replace(/^@/, '');
+  db.prepare('INSERT OR IGNORE INTO chief_moderators (username) VALUES (?)').run(clean);
+  const user = db.prepare('SELECT * FROM users WHERE username=?').get(clean);
+  if (user) {
+    let tags = JSON.parse(user.active_tags || '["BEGINNER"]');
+    if (!tags.includes('CHIEF_MODERATOR')) tags.push('CHIEF_MODERATOR');
+    db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/chief-moderators/:username', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const clean = req.params.username.toLowerCase();
+  db.prepare('DELETE FROM chief_moderators WHERE username=?').run(clean);
+  const user = db.prepare('SELECT * FROM users WHERE username=?').get(clean);
+  if (user) {
+    let tags = JSON.parse(user.active_tags || '["BEGINNER"]').filter(t => t !== 'CHIEF_MODERATOR');
+    db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
+// ── Deputy Chief Moderator management ───────────────────────────
+app.get('/api/admin/deputy-chief-moderators', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  res.json({ ok: true, deputyChiefModerators: db.prepare('SELECT username FROM deputy_chief_moderators').all().map(r => r.username) });
+});
+
+app.post('/api/admin/deputy-chief-moderators', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const { username } = req.body;
+  if (!username) return res.json({ ok: false, error: 'Укажите username.' });
+  const clean = username.toLowerCase().replace(/^@/, '');
+  db.prepare('INSERT OR IGNORE INTO deputy_chief_moderators (username) VALUES (?)').run(clean);
+  const user = db.prepare('SELECT * FROM users WHERE username=?').get(clean);
+  if (user) {
+    let tags = JSON.parse(user.active_tags || '["BEGINNER"]');
+    if (!tags.includes('DEPUTY_CHIEF_MODERATOR')) tags.push('DEPUTY_CHIEF_MODERATOR');
+    db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/deputy-chief-moderators/:username', (req, res) => {
+  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  const clean = req.params.username.toLowerCase();
+  db.prepare('DELETE FROM deputy_chief_moderators WHERE username=?').run(clean);
+  const user = db.prepare('SELECT * FROM users WHERE username=?').get(clean);
+  if (user) {
+    let tags = JSON.parse(user.active_tags || '["BEGINNER"]').filter(t => t !== 'DEPUTY_CHIEF_MODERATOR');
+    db.prepare('UPDATE users SET active_tags=? WHERE username=?').run(JSON.stringify(tags), clean);
+  }
+  backupDb();
+  res.json({ ok: true });
+});
+
 // ── Pin / Status for section posts ──────────────────────────────
 app.patch('/api/sections/:section/:postId/pin', (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
@@ -918,7 +1014,7 @@ app.patch('/api/sections/:section/:postId/pin', (req, res) => {
 });
 
 app.patch('/api/sections/:section/:postId/status', (req, res) => {
-  if (!req.user || !isAdmin(req.user.username) && !isModerator(req.user.username))
+  if (!req.user || !isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const { status } = req.body;
   if (!['new', 'read', 'pending'].includes(status))
