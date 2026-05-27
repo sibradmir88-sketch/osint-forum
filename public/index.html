@@ -2,7 +2,21 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#7c3aed" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="OSINT Forum" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="application-name" content="OSINT Forum" />
+  <meta name="msapplication-TileColor" content="#7c3aed" />
+  <meta name="msapplication-tap-highlight" content="no" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
+  <link rel="mask-icon" href="/icons/icon-192.svg" color="#7c3aed" />
+  <!-- iOS splash screen -->
+  <link rel="apple-touch-startup-image" href="/icons/icon-512.svg" media="(device-width: 375px)" />
   <title>OSINT forum</title>
   <link
     rel="stylesheet"
@@ -3525,11 +3539,149 @@
 
     @media print {
       .header, .footer, .back-btn, .menu-btn, .nav-links, .reply-form-wrap,
-      .paste-reply-form, .reactions-bar, .post-menu-wrap {
+      .paste-reply-form, .reactions-bar, .post-menu-wrap, .bottom-nav {
         display: none !important;
       }
       body { background: white; color: black; }
       .container { width: 100%; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       BOTTOM NAV — Mobile tab bar
+    ═══════════════════════════════════════════════════════════ */
+    .bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 1400;
+      background: rgba(15, 15, 15, 0.92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 6px env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 6px) env(safe-area-inset-left, 0px);
+      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.3);
+    }
+    .bottom-nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .bottom-nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 10px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.6rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.2s ease, transform 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      min-height: 44px;
+      min-width: 44px;
+      position: relative;
+      border-radius: 8px;
+    }
+    .bottom-nav-item i {
+      font-size: 1.25rem;
+      transition: transform 0.2s ease;
+    }
+    .bottom-nav-item span {
+      line-height: 1;
+      letter-spacing: 0.2px;
+    }
+    .bottom-nav-item:active {
+      transform: scale(0.92);
+    }
+    .bottom-nav-item.active {
+      color: var(--accent-2);
+    }
+    .bottom-nav-item.active i {
+      transform: scale(1.1);
+      filter: drop-shadow(0 0 6px rgba(139,92,246,0.4));
+    }
+    .bottom-nav-item .badge-dot {
+      position: absolute;
+      top: 4px;
+      right: 6px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      border: 2px solid var(--bg-primary);
+      display: none;
+    }
+    .bottom-nav-item .badge-dot.show { display: block; }
+
+    /* Add padding for bottom nav on mobile */
+    .bottom-nav-active .page.active {
+      padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+    }
+
+    @media (max-width: 768px) {
+      .bottom-nav { display: block; }
+      .bottom-nav-active .header .nav-links { display: none; }
+      .bottom-nav-active .menu-btn { display: none !important; }
+    }
+
+    /* Display mode adjustments for PWA standalone */
+    @media (display-mode: standalone) {
+      .header { padding-top: env(safe-area-inset-top, 0px); }
+      .bottom-nav { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
+      body { overscroll-behavior: none; }
+    }
+    @media (display-mode: minimal-ui) {
+      .header { padding-top: env(safe-area-inset-top, 0px); }
+    }
+
+    /* Smooth scrolling momentum on iOS */
+    .page.active {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+
+    /* Better tap targets for mobile touch */
+    @media (hover: none) and (pointer: coarse) {
+      .post-dropdown-item { padding: 12px 14px; min-height: 44px; }
+      .auth-submit-btn { min-height: 50px; }
+      .paste-submit-btn { min-height: 50px; }
+      .paste-reply-submit { min-height: 48px; }
+      .reply-submit-btn { min-height: 48px; }
+      .admin-btn { min-height: 40px; padding: 10px 18px; }
+    }
+
+    /* Loading skeleton animation */
+    .skeleton {
+      background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+      background-size: 200% 100%;
+      animation: skeletonShine 1.5s ease-in-out infinite;
+      border-radius: 8px;
+    }
+    @keyframes skeletonShine {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Premium micro-animations */
+    .post-card, .paste-card, .mod-post-card, .user-card, .profile-card {
+      transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.2s ease;
+    }
+    .post-card:active, .paste-card:active, .user-card:active {
+      transform: scale(0.99);
+    }
+
+    /* iOS pull-to-refresh disable for SPA */
+    body {
+      overscroll-behavior-y: contain;
     }
   </style>
 </head>
@@ -3973,6 +4125,33 @@
         <div class="accordion" id="modalAccordion"></div>
       </div>
     </div>
+
+    <!-- ═══ BOTTOM NAVIGATION (mobile) ═══ -->
+    <nav class="bottom-nav" id="bottomNav" aria-label="Навигация">
+      <div class="bottom-nav-inner">
+        <button class="bottom-nav-item" data-route="home" onclick="navigateTo('home')">
+          <i class="fa-solid fa-house"></i>
+          <span>Главная</span>
+        </button>
+        <button class="bottom-nav-item" data-route="forum" onclick="navigateTo('forum')">
+          <i class="fa-solid fa-comments"></i>
+          <span>Форум</span>
+          <span class="badge-dot" id="bnBadgeForum"></span>
+        </button>
+        <button class="bottom-nav-item" data-route="services" onclick="navigateTo('services')">
+          <i class="fa-solid fa-briefcase"></i>
+          <span>Услуги</span>
+        </button>
+        <button class="bottom-nav-item" data-route="moderators" onclick="navigateTo('moderators')">
+          <i class="fa-solid fa-shield-halved"></i>
+          <span>Модераторы</span>
+        </button>
+        <button class="bottom-nav-item" id="bnProfile" onclick="openAuthOrProfile()">
+          <i class="fa-solid fa-user"></i>
+          <span>Профиль</span>
+        </button>
+      </div>
+    </nav>
 
     <footer class="footer">
       <div class="container footer-inner">
@@ -5399,6 +5578,14 @@
       document.getElementById("authOverlay").classList.remove("open");
       document.body.style.overflow = "";
     }
+    window.openAuthOrProfile = function() {
+      const session = getSession();
+      if (session) {
+        navigateTo('profile');
+      } else {
+        openAuthModal('login');
+      }
+    };
     function switchAuthTab(tab) {
       const isLogin = tab === "login";
       document.getElementById("tabLogin").classList.toggle("active", isLogin);
@@ -6285,6 +6472,11 @@
 
     function setActiveNavLink(route) {
       document.querySelectorAll('.nav-link').forEach(link => link.classList.toggle('active', link.dataset.route === route));
+      // Bottom nav
+      document.querySelectorAll('.bottom-nav-item').forEach(item => {
+        const r = item.dataset.route;
+        item.classList.toggle('active', r === route);
+      });
     }
 
     function htmlRouteLink(route, options = {}) {
@@ -7434,6 +7626,19 @@
       initModalEvents();
       initParticles();
       initPastePage();
+
+      // Register Service Worker for PWA
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+      }
+
+      // Enable bottom nav on mobile
+      if (window.innerWidth <= 768) {
+        document.body.classList.add('bottom-nav-active');
+      }
+      window.addEventListener('resize', () => {
+        document.body.classList.toggle('bottom-nav-active', window.innerWidth <= 768);
+      });
 
       window.addEventListener("popstate", renderRoute);
       const initial = getRouteStateFromUrl();
