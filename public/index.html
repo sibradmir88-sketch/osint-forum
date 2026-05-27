@@ -2026,7 +2026,7 @@
       align-items: center;
       gap: 4px;
       font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 0.68rem;
+      font-size: clamp(0.55rem, 1.8vw, 0.68rem);
       font-weight: 600;
       letter-spacing: 0.7px;
       padding: 3px 9px;
@@ -2038,6 +2038,7 @@
       cursor: default;
       white-space: nowrap;
       transition: box-shadow 0.3s ease;
+      -webkit-tap-highlight-color: transparent;
     }
 
     /* BEGINNER */
@@ -2153,88 +2154,88 @@
     .utag-SOCMINTER::before { content:"⋆"; font-size:0.65rem; }
     @keyframes pulseSoc { 0%,100%{box-shadow:0 0 8px rgba(244,143,177,0.25);border-color:rgba(244,143,177,0.4);} 50%{box-shadow:0 0 18px rgba(244,143,177,0.55),0 0 32px rgba(244,143,177,0.2);border-color:rgba(244,143,177,0.75);} }
 
-    /* MODERATOR */
+    /* MODERATOR — ☠ skull, dark necro-purple */
     .utag-MODERATOR {
-      background: linear-gradient(135deg,#1a1030,#2d1b5c,#120a28);
+      background: linear-gradient(135deg,#0d001a,#1a0033,#0d001a);
       background-size: 200% 200%;
-      color: #c4b5fd;
-      border-color: rgba(167,139,250,0.55);
-      box-shadow: 0 0 12px rgba(167,139,250,0.35), 0 0 26px rgba(124,58,237,0.2), inset 0 0 8px rgba(196,181,253,0.08);
+      color: #c084fc;
+      border-color: rgba(192,132,252,0.55);
+      box-shadow: 0 0 14px rgba(192,132,252,0.4), 0 0 30px rgba(168,85,247,0.2), inset 0 0 10px rgba(192,132,252,0.08);
       animation: pulseModerator 2.2s ease-in-out infinite, moderatorShift 4.2s ease-in-out infinite;
-      text-shadow: 0 0 8px rgba(196,181,253,0.55);
+      text-shadow: 0 0 10px rgba(192,132,252,0.6);
     }
-    .utag-MODERATOR::before { content:"♰"; font-size:0.65rem; }
+    .utag-MODERATOR::before { content:"☠"; font-size:0.7rem; }
     @keyframes pulseModerator {
-      0%,100% { box-shadow: 0 0 12px rgba(167,139,250,0.35), 0 0 26px rgba(124,58,237,0.2), inset 0 0 8px rgba(196,181,253,0.08); border-color: rgba(167,139,250,0.55); }
-      50% { box-shadow: 0 0 26px rgba(196,181,253,0.72), 0 0 50px rgba(139,92,246,0.35), inset 0 0 14px rgba(196,181,253,0.18); border-color: rgba(216,180,254,0.95); }
+      0%,100% { box-shadow: 0 0 14px rgba(192,132,252,0.4), 0 0 30px rgba(168,85,247,0.2), inset 0 0 10px rgba(192,132,252,0.08); border-color: rgba(192,132,252,0.55); }
+      50% { box-shadow: 0 0 32px rgba(216,180,254,0.85), 0 0 56px rgba(168,85,247,0.4), inset 0 0 18px rgba(216,180,254,0.18); border-color: rgba(216,180,254,1); }
     }
     @keyframes moderatorShift {
-      0%,100% { background-position: 0% 50%; color: #c4b5fd; }
-      50% { background-position: 100% 50%; color: #ddd6fe; }
+      0%,100% { background-position: 0% 50%; color: #c084fc; }
+      50% { background-position: 100% 50%; color: #e9d5ff; }
     }
 
-    /* OWNER */
+    /* OWNER — ⚔ crossed swords, imperial gold */
     .utag-OWNER {
-      background: linear-gradient(135deg,#2a1a00,#4a2f00,#2a1a00);
+      background: linear-gradient(135deg,#1a1200,#332200,#1a1200);
       background-size: 200% 200%;
-      color: #fbbf24;
-      border-color: rgba(251,191,36,0.6);
-      box-shadow: 0 0 14px rgba(251,191,36,0.42), 0 0 30px rgba(245,158,11,0.22), inset 0 0 10px rgba(255,220,120,0.1);
+      color: #facc15;
+      border-color: rgba(250,204,21,0.65);
+      box-shadow: 0 0 18px rgba(250,204,21,0.5), 0 0 40px rgba(234,179,8,0.25), inset 0 0 12px rgba(255,230,100,0.12);
       animation: pulseOwner 2s ease-in-out infinite, ownerShift 3.8s ease-in-out infinite;
-      text-shadow: 0 0 10px rgba(253,224,71,0.58);
+      text-shadow: 0 0 14px rgba(255,230,100,0.7);
       font-weight: 700;
     }
-    .utag-OWNER::before { content:"✠"; font-size:0.65rem; }
+    .utag-OWNER::before { content:"⚔"; font-size:0.7rem; }
     @keyframes pulseOwner {
-      0%,100% { box-shadow: 0 0 14px rgba(251,191,36,0.42), 0 0 30px rgba(245,158,11,0.22), inset 0 0 10px rgba(255,220,120,0.1); border-color: rgba(251,191,36,0.6); }
-      50% { box-shadow: 0 0 30px rgba(253,224,71,0.85), 0 0 56px rgba(234,179,8,0.45), inset 0 0 16px rgba(255,241,150,0.25); border-color: rgba(255,236,120,1); }
+      0%,100% { box-shadow: 0 0 18px rgba(250,204,21,0.5), 0 0 40px rgba(234,179,8,0.25), inset 0 0 12px rgba(255,230,100,0.12); border-color: rgba(250,204,21,0.65); }
+      50% { box-shadow: 0 0 40px rgba(255,230,100,0.95), 0 0 70px rgba(250,204,21,0.5), inset 0 0 20px rgba(255,241,150,0.3); border-color: rgba(255,241,150,1); }
     }
     @keyframes ownerShift {
-      0%,100% { background-position: 0% 50%; color: #fbbf24; }
-      40% { background-position: 100% 50%; color: #fde047; }
-      80% { background-position: 50% 0%; color: #f59e0b; }
+      0%,100% { background-position: 0% 50%; color: #facc15; }
+      40% { background-position: 100% 50%; color: #fef08a; }
+      80% { background-position: 50% 0%; color: #fbbf24; }
     }
 
-    /* CHIEF_MODERATOR */
+    /* CHIEF_MODERATOR — ⚰ coffin, blood rose */
     .utag-CHIEF_MODERATOR {
-      background: linear-gradient(135deg,#3d0000,#7f1d1d,#3d0000);
+      background: linear-gradient(135deg,#1a0000,#3d0000,#1a0000);
       background-size: 200% 200%;
-      color: #fca5a5;
-      border-color: rgba(220,38,38,0.65);
-      box-shadow: 0 0 14px rgba(220,38,38,0.45), 0 0 30px rgba(220,38,38,0.18), inset 0 0 8px rgba(252,165,165,0.08);
+      color: #fb7185;
+      border-color: rgba(251,113,133,0.6);
+      box-shadow: 0 0 16px rgba(251,113,133,0.5), 0 0 34px rgba(244,63,94,0.25), inset 0 0 10px rgba(251,113,133,0.1);
       animation: pulseChiefMod 2s ease-in-out infinite, chiefModShift 3.5s ease-in-out infinite;
-      text-shadow: 0 0 8px rgba(252,165,165,0.5);
+      text-shadow: 0 0 12px rgba(251,113,133,0.6);
       font-weight: 600;
     }
-    .utag-CHIEF_MODERATOR::before { content:"☩"; font-size:0.65rem; }
+    .utag-CHIEF_MODERATOR::before { content:"⚰"; font-size:0.7rem; }
     @keyframes pulseChiefMod {
-      0%,100% { box-shadow: 0 0 14px rgba(220,38,38,0.45), 0 0 30px rgba(220,38,38,0.18), inset 0 0 8px rgba(252,165,165,0.08); border-color: rgba(220,38,38,0.65); }
-      50% { box-shadow: 0 0 28px rgba(252,165,165,0.75), 0 0 50px rgba(220,38,38,0.35), inset 0 0 16px rgba(252,165,165,0.18); border-color: rgba(252,165,165,1); }
+      0%,100% { box-shadow: 0 0 16px rgba(251,113,133,0.5), 0 0 34px rgba(244,63,94,0.25), inset 0 0 10px rgba(251,113,133,0.1); border-color: rgba(251,113,133,0.6); }
+      50% { box-shadow: 0 0 36px rgba(253,164,175,0.9), 0 0 60px rgba(244,63,94,0.45), inset 0 0 20px rgba(253,164,175,0.2); border-color: rgba(253,164,175,1); }
     }
     @keyframes chiefModShift {
-      0%,100% { background-position: 0% 50%; color: #fca5a5; }
-      50% { background-position: 100% 50%; color: #fecaca; }
+      0%,100% { background-position: 0% 50%; color: #fb7185; }
+      50% { background-position: 100% 50%; color: #fda4af; }
     }
 
-    /* DEPUTY_CHIEF_MODERATOR */
+    /* DEPUTY_CHIEF_MODERATOR — ⛧ inverted pentagram, deep purple */
     .utag-DEPUTY_CHIEF_MODERATOR {
-      background: linear-gradient(135deg,#2d0a3d,#4c1d95,#2d0a3d);
+      background: linear-gradient(135deg,#0d001a,#1a0040,#0d001a);
       background-size: 200% 200%;
-      color: #e9d5ff;
-      border-color: rgba(147,51,234,0.65);
-      box-shadow: 0 0 14px rgba(147,51,234,0.45), 0 0 30px rgba(147,51,234,0.18), inset 0 0 8px rgba(233,213,255,0.08);
+      color: #c084fc;
+      border-color: rgba(168,85,247,0.6);
+      box-shadow: 0 0 14px rgba(168,85,247,0.45), 0 0 30px rgba(168,85,247,0.2), inset 0 0 10px rgba(192,132,252,0.1);
       animation: pulseDeputyMod 2s ease-in-out infinite, deputyModShift 3.5s ease-in-out infinite;
-      text-shadow: 0 0 8px rgba(233,213,255,0.5);
+      text-shadow: 0 0 10px rgba(192,132,252,0.55);
       font-weight: 600;
     }
-    .utag-DEPUTY_CHIEF_MODERATOR::before { content:"⛧"; font-size:0.65rem; }
+    .utag-DEPUTY_CHIEF_MODERATOR::before { content:"⛧"; font-size:0.7rem; }
     @keyframes pulseDeputyMod {
-      0%,100% { box-shadow: 0 0 14px rgba(147,51,234,0.45), 0 0 30px rgba(147,51,234,0.18), inset 0 0 8px rgba(233,213,255,0.08); border-color: rgba(147,51,234,0.65); }
-      50% { box-shadow: 0 0 28px rgba(233,213,255,0.75), 0 0 50px rgba(147,51,234,0.35), inset 0 0 16px rgba(233,213,255,0.18); border-color: rgba(233,213,255,1); }
+      0%,100% { box-shadow: 0 0 14px rgba(168,85,247,0.45), 0 0 30px rgba(168,85,247,0.2), inset 0 0 10px rgba(192,132,252,0.1); border-color: rgba(168,85,247,0.6); }
+      50% { box-shadow: 0 0 30px rgba(216,180,254,0.85), 0 0 52px rgba(168,85,247,0.4), inset 0 0 18px rgba(216,180,254,0.2); border-color: rgba(216,180,254,1); }
     }
     @keyframes deputyModShift {
-      0%,100% { background-position: 0% 50%; color: #e9d5ff; }
-      50% { background-position: 100% 50%; color: #f3e8ff; }
+      0%,100% { background-position: 0% 50%; color: #c084fc; }
+      50% { background-position: 100% 50%; color: #e9d5ff; }
     }
 
     /* Tags selector in profile */
@@ -2267,6 +2268,7 @@
       color: var(--text-main);
       background: rgba(255,255,255,0.06);
     }
+    .tag-select-btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
     .tag-select-btn.locked {
       opacity: 0.4;
       cursor: not-allowed;
@@ -2287,10 +2289,10 @@
     .tag-select-btn.utag-TECHINTER { background:linear-gradient(135deg,#1a1200,#2e2000); color:#ffca28; border-color:rgba(255,202,40,0.45); animation:pulseTech 3s ease-in-out infinite; }
     .tag-select-btn.utag-FININTER  { background:linear-gradient(135deg,#001a1a,#002a2a); color:#4dd0e1; border-color:rgba(77,208,225,0.45); animation:pulseFin 2.7s ease-in-out infinite; }
     .tag-select-btn.utag-SOCMINTER { background:linear-gradient(135deg,#1a0010,#2e0020); color:#f48fb1; border-color:rgba(244,143,177,0.45); animation:pulseSoc 3.2s ease-in-out infinite; }
-    .tag-select-btn.utag-MODERATOR { background:linear-gradient(135deg,#1a1030,#2d1b5c,#120a28); color:#c4b5fd; border-color:rgba(167,139,250,0.55); animation:pulseModerator 2.2s ease-in-out infinite, moderatorShift 4.2s ease-in-out infinite; }
-    .tag-select-btn.utag-CHIEF_MODERATOR { background:linear-gradient(135deg,#3d0000,#7f1d1d,#3d0000); color:#fca5a5; border-color:rgba(220,38,38,0.65); animation:pulseChiefMod 2s ease-in-out infinite, chiefModShift 3.5s ease-in-out infinite; }
-    .tag-select-btn.utag-DEPUTY_CHIEF_MODERATOR { background:linear-gradient(135deg,#2d0a3d,#4c1d95,#2d0a3d); color:#e9d5ff; border-color:rgba(147,51,234,0.65); animation:pulseDeputyMod 2s ease-in-out infinite, deputyModShift 3.5s ease-in-out infinite; }
-    .tag-select-btn.utag-OWNER { background:linear-gradient(135deg,#2a1a00,#4a2f00,#2a1a00); color:#fbbf24; border-color:rgba(251,191,36,0.6); animation:pulseOwner 2s ease-in-out infinite, ownerShift 3.8s ease-in-out infinite; }
+    .tag-select-btn.utag-MODERATOR { background:linear-gradient(135deg,#0d001a,#1a0033,#0d001a); color:#c084fc; border-color:rgba(192,132,252,0.55); animation:pulseModerator 2.2s ease-in-out infinite, moderatorShift 4.2s ease-in-out infinite; }
+    .tag-select-btn.utag-CHIEF_MODERATOR { background:linear-gradient(135deg,#1a0000,#3d0000,#1a0000); color:#fb7185; border-color:rgba(251,113,133,0.6); animation:pulseChiefMod 2s ease-in-out infinite, chiefModShift 3.5s ease-in-out infinite; }
+    .tag-select-btn.utag-DEPUTY_CHIEF_MODERATOR { background:linear-gradient(135deg,#0d001a,#2d0a3d,#0d001a); color:#c084fc; border-color:rgba(168,85,247,0.6); animation:pulseDeputyMod 2s ease-in-out infinite, deputyModShift 3.5s ease-in-out infinite; }
+    .tag-select-btn.utag-OWNER { background:linear-gradient(135deg,#1a1200,#332200,#1a1200); color:#facc15; border-color:rgba(250,204,21,0.65); animation:pulseOwner 2s ease-in-out infinite, ownerShift 3.8s ease-in-out infinite; }
 
     /* Admin tag in selector */
     .tag-select-btn.utag-ADMIN {
@@ -3604,24 +3606,24 @@
       66%     { box-shadow: 0 0 14px rgba(200,100,140,0.5); color:#f48fb1; }
     }
     @keyframes pulseModeratorV2 {
-      0%,100% { box-shadow: 0 0 10px rgba(167,139,250,0.4), 0 0 0px rgba(124,58,237,0); border-color:rgba(167,139,250,0.55); }
-      35%     { box-shadow: 0 0 28px rgba(196,181,253,0.9), 0 0 52px rgba(124,58,237,0.35); border-color:rgba(221,214,254,1); color:#ede9fe; }
-      70%     { box-shadow: 0 0 16px rgba(167,139,250,0.6), 0 0 32px rgba(124,58,237,0.25); border-color:rgba(196,181,253,0.75); color:#c4b5fd; }
+      0%,100% { box-shadow: 0 0 12px rgba(192,132,252,0.45), 0 0 0px rgba(168,85,247,0); border-color:rgba(192,132,252,0.55); }
+      35%     { box-shadow: 0 0 32px rgba(216,180,254,0.95), 0 0 56px rgba(168,85,247,0.4); border-color:rgba(216,180,254,1); color:#e9d5ff; }
+      70%     { box-shadow: 0 0 18px rgba(192,132,252,0.65), 0 0 34px rgba(168,85,247,0.25); border-color:rgba(216,180,254,0.75); color:#c084fc; }
     }
     @keyframes pulseChiefModV2 {
-      0%,100% { box-shadow: 0 0 14px rgba(220,38,38,0.5), 0 0 0px rgba(220,38,38,0); border-color:rgba(220,38,38,0.65); }
-      35%     { box-shadow: 0 0 30px rgba(252,165,165,0.9), 0 0 55px rgba(220,38,38,0.4); border-color:rgba(252,165,165,1); color:#fecaca; }
-      70%     { box-shadow: 0 0 18px rgba(220,38,38,0.65), 0 0 34px rgba(220,38,38,0.25); border-color:rgba(252,165,165,0.75); color:#fca5a5; }
+      0%,100% { box-shadow: 0 0 16px rgba(251,113,133,0.5), 0 0 0px rgba(244,63,94,0); border-color:rgba(251,113,133,0.6); }
+      35%     { box-shadow: 0 0 36px rgba(253,164,175,0.95), 0 0 60px rgba(244,63,94,0.45); border-color:rgba(253,164,175,1); color:#fda4af; }
+      70%     { box-shadow: 0 0 20px rgba(251,113,133,0.7), 0 0 36px rgba(244,63,94,0.3); border-color:rgba(253,164,175,0.75); color:#fb7185; }
     }
     @keyframes pulseDeputyModV2 {
-      0%,100% { box-shadow: 0 0 14px rgba(147,51,234,0.5), 0 0 0px rgba(147,51,234,0); border-color:rgba(147,51,234,0.65); }
-      35%     { box-shadow: 0 0 30px rgba(233,213,255,0.9), 0 0 55px rgba(147,51,234,0.4); border-color:rgba(233,213,255,1); color:#f3e8ff; }
-      70%     { box-shadow: 0 0 18px rgba(147,51,234,0.65), 0 0 34px rgba(147,51,234,0.25); border-color:rgba(233,213,255,0.75); color:#e9d5ff; }
+      0%,100% { box-shadow: 0 0 14px rgba(168,85,247,0.5), 0 0 0px rgba(168,85,247,0); border-color:rgba(168,85,247,0.65); }
+      35%     { box-shadow: 0 0 32px rgba(216,180,254,0.95), 0 0 56px rgba(168,85,247,0.4); border-color:rgba(216,180,254,1); color:#e9d5ff; }
+      70%     { box-shadow: 0 0 18px rgba(168,85,247,0.65), 0 0 34px rgba(168,85,247,0.25); border-color:rgba(216,180,254,0.75); color:#c084fc; }
     }
     @keyframes pulseOwnerV2 {
-      0%,100% { box-shadow: 0 0 12px rgba(251,191,36,0.45), 0 0 0px rgba(234,179,8,0); border-color:rgba(251,191,36,0.62); }
-      30%     { box-shadow: 0 0 32px rgba(253,224,71,0.95), 0 0 60px rgba(245,158,11,0.42); border-color:rgba(254,240,138,1); color:#fef08a; }
-      70%     { box-shadow: 0 0 18px rgba(251,191,36,0.65), 0 0 34px rgba(234,179,8,0.28); border-color:rgba(252,211,77,0.8); color:#fbbf24; }
+      0%,100% { box-shadow: 0 0 16px rgba(250,204,21,0.5), 0 0 0px rgba(234,179,8,0); border-color:rgba(250,204,21,0.65); }
+      30%     { box-shadow: 0 0 40px rgba(255,230,100,0.95), 0 0 70px rgba(250,204,21,0.5); border-color:rgba(255,241,150,1); color:#fef08a; }
+      70%     { box-shadow: 0 0 22px rgba(250,204,21,0.7), 0 0 38px rgba(234,179,8,0.3); border-color:rgba(255,230,100,0.8); color:#facc15; }
     }
 
     /* Override existing tag animations with V2 for stronger effect */
@@ -3677,6 +3679,13 @@
       .complaints-page-wrap { padding: 60px 8px; }
       .forum-type-tabs { flex-direction: column; }
       .forum-type-tab { width: 100%; justify-content: center; }
+      .utag { font-size: 0.6rem; padding: 2px 6px; letter-spacing: 0.4px; }
+      .utag::before { font-size: 0.55rem !important; }
+      .tag-select-btn { font-size: 0.72rem; padding: 7px 8px; min-height: 44px; }
+      .tag-select-btn .utag { font-size: 0.6rem; padding: 1px 5px; }
+      .tags-selector-grid { gap: 5px; }
+      .admin-user-row { flex-wrap: wrap; gap: 6px; }
+      .admin-user-row .utag { font-size: 0.55rem; padding: 1px 5px; }
     }
 
     @media (min-width: 381px) and (max-width: 480px) {
@@ -3688,6 +3697,8 @@
       .admin-tabs { flex-wrap: wrap; }
       .admin-tab { font-size: 0.78rem; padding: 7px 10px; }
       .reaction-picker-grid { grid-template-columns: repeat(4, 1fr); }
+      .tag-select-btn { font-size: 0.75rem; padding: 8px 10px; min-height: 44px; }
+      .admin-user-row .utag { font-size: 0.6rem; padding: 2px 6px; }
     }
 
     @media (min-width: 481px) and (max-width: 768px) {
@@ -6107,10 +6118,10 @@
       "BEGINNER":            { emoji:"✦",  color:"#90caf9", unlockMode:"auto",  desc:"Выдаётся при регистрации" },
       "OSINT'ER":            { emoji:"⚷",  color:"#e040fb", unlockMode:"free", desc:"Тег OSINT-специалиста — выберите в профиле" },
       "ADMIN":               { emoji:"⚜",  color:"#ff2222", unlockMode:"admin", desc:"Только для администраторов" },
-      "MODERATOR":           { emoji:"♰",  color:"#7e22ce", unlockMode:"admin", desc:"Тег для модераторов" },
-      "CHIEF_MODERATOR":     { emoji:"☩",  color:"#dc2626", unlockMode:"admin", desc:"Главный модератор — доступны баны, муты, жалобы" },
-      "DEPUTY_CHIEF_MODERATOR": { emoji:"⛧", color:"#9333ea", unlockMode:"admin", desc:"Заместитель главного модератора — баны, муты, жалобы" },
-      "OWNER":               { emoji:"✠",  color:"#f59e0b", unlockMode:"admin", desc:"Тег владельца сообщества" },
+      "MODERATOR":           { emoji:"☠",  color:"#c084fc", unlockMode:"admin", desc:"Тег для модераторов" },
+      "CHIEF_MODERATOR":     { emoji:"⚰",  color:"#fb7185", unlockMode:"admin", desc:"Главный модератор — доступны баны, муты, жалобы", label:"CH. MODERATOR" },
+      "DEPUTY_CHIEF_MODERATOR": { emoji:"⛧", color:"#a855f7", unlockMode:"admin", desc:"Заместитель главного модератора — баны, муты, жалобы", label:"DEPUTY CH. M." },
+      "OWNER":               { emoji:"⚔",  color:"#facc15", unlockMode:"admin", desc:"Тег владельца сообщества" },
       "GEOINT'ER":           { emoji:"☰",  color:"#66bb6a", unlockMode:"free",  desc:"Геопространственная разведка" },
       "CSINT'ER":            { emoji:"⚙",  color:"#42a5f5", unlockMode:"free",  desc:"Разведка с открытых источников" },
       "HUMINT'ER":           { emoji:"☾",  color:"#ef9a9a", unlockMode:"free",  desc:"Разведка на основе людей" },
@@ -6943,13 +6954,13 @@
                   const specialStyle = isAdminTag
                     ? `background:linear-gradient(135deg,#1a0000,#3d0000)!important;color:#ff2222!important;border-color:rgba(255,30,30,0.7)!important;box-shadow:0 0 14px rgba(255,0,0,0.5)!important;text-shadow:0 0 6px rgba(255,0,0,0.8)!important;font-weight:700;opacity:1!important;`
                     : isModeratorTag
-                      ? `background:linear-gradient(135deg,#312e81,#7c3aed)!important;color:#d8b4fe!important;border-color:rgba(139,92,246,0.75)!important;box-shadow:0 0 10px rgba(124,58,237,0.4)!important;`
+                      ? `background:linear-gradient(135deg,#0d001a,#1a0033)!important;color:#c084fc!important;border-color:rgba(192,132,252,0.75)!important;box-shadow:0 0 14px rgba(192,132,252,0.5)!important;text-shadow:0 0 6px rgba(192,132,252,0.5)!important;`
                       : isChiefModeratorTag
-                        ? `background:linear-gradient(135deg,#7f1d1d,#dc2626)!important;color:#fca5a5!important;border-color:rgba(220,38,38,0.8)!important;box-shadow:0 0 12px rgba(220,38,38,0.5)!important;`
+                        ? `background:linear-gradient(135deg,#1a0000,#3d0000)!important;color:#fb7185!important;border-color:rgba(251,113,133,0.8)!important;box-shadow:0 0 16px rgba(251,113,133,0.55)!important;text-shadow:0 0 8px rgba(251,113,133,0.5)!important;`
                         : isDeputyChiefModeratorTag
-                          ? `background:linear-gradient(135deg,#4c1d95,#9333ea)!important;color:#e9d5ff!important;border-color:rgba(147,51,234,0.8)!important;box-shadow:0 0 12px rgba(147,51,234,0.5)!important;`
+                          ? `background:linear-gradient(135deg,#0d001a,#2d0a3d)!important;color:#c084fc!important;border-color:rgba(168,85,247,0.8)!important;box-shadow:0 0 14px rgba(168,85,247,0.5)!important;text-shadow:0 0 6px rgba(168,85,247,0.5)!important;`
                           : isOwnerTag
-                            ? `background:linear-gradient(135deg,#f97316,#facc15)!important;color:#171717!important;border-color:rgba(251,191,36,0.8)!important;box-shadow:0 0 10px rgba(251,191,36,0.4)!important;`
+                            ? `background:linear-gradient(135deg,#1a1200,#332200)!important;color:#facc15!important;border-color:rgba(250,204,21,0.8)!important;box-shadow:0 0 16px rgba(250,204,21,0.55)!important;text-shadow:0 0 8px rgba(250,204,21,0.5)!important;`
                             : "";
                   const lockedStyle = locked && !isAdminTag && !isChiefModeratorTag && !isDeputyChiefModeratorTag && !isOwnerTag ? "opacity:0.45;cursor:not-allowed;" : "";
                   return `<button
@@ -6960,7 +6971,7 @@
                     data-username="${escapeHtml(username)}"
                     style="color:${info.color};${activeStyle}${specialStyle}${lockedStyle}"
                     title="${info.desc}">
-                    ${info.emoji} ${tag}${locked && !isAdminTag && !isChiefModeratorTag && !isDeputyChiefModeratorTag && !isOwnerTag ? " 🔒" : ""}
+                    ${info.emoji} ${info.label || tag}${locked && !isAdminTag && !isChiefModeratorTag && !isDeputyChiefModeratorTag && !isOwnerTag ? " 🔒" : ""}
                   </button>`;
                 }).join("")}
               </div>
@@ -7180,25 +7191,25 @@
           <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Управление персоналом: назначайте и снимайте роли.</p>
           <div style="display:grid;gap:12px;">
             <div style="display:grid;gap:8px;">
-              <div style="font-weight:700;">☩ Главные модераторы</div>
+              <div style="font-weight:700;">⚰ CH. MODERATOR</div>
               <p style="color:var(--text-muted);font-size:0.78rem;">Баны, муты, жалобы, управление разделами</p>
-              ${chiefModerators.length ? chiefModerators.map(u => `<div class="admin-user-row"><span class="utag utag-CHIEF_MODERATOR">CHIEF_MOD</span><span class="admin-user-name">@${escapeHtml(u)}</span><button class="admin-btn danger" onclick="removeChiefModerator('${escapeHtml(u)}')"><i class="fa-solid fa-trash"></i> Убрать</button></div>`).join("") : `<div style="color:var(--text-muted);font-size:0.85rem;">Пока нет главных модераторов.</div>`}
+              ${chiefModerators.length ? chiefModerators.map(u => `<div class="admin-user-row"><span class="utag utag-CHIEF_MODERATOR">CH. MODERATOR</span><span class="admin-user-name">@${escapeHtml(u)}</span><button class="admin-btn danger" onclick="removeChiefModerator('${escapeHtml(u)}')"><i class="fa-solid fa-trash"></i> Убрать</button></div>`).join("") : `<div style="color:var(--text-muted);font-size:0.85rem;">Пока нет главных модераторов.</div>`}
               <div class="admin-add-row">
                 <input type="text" id="newChiefModeratorInput" placeholder="@username главного модератора" />
                 <button class="admin-btn" onclick="addChiefModerator()"><i class="fa-solid fa-plus"></i> Добавить</button>
               </div>
             </div>
             <div style="display:grid;gap:8px;">
-              <div style="font-weight:700;">⛧ Заместители главного модератора</div>
+              <div style="font-weight:700;">⛧ DEPUTY CH. M.</div>
               <p style="color:var(--text-muted);font-size:0.78rem;">Баны, муты, жалобы, управление разделами</p>
-              ${deputyChiefModerators.length ? deputyChiefModerators.map(u => `<div class="admin-user-row"><span class="utag utag-DEPUTY_CHIEF_MODERATOR">DEP.CHIEF_MOD</span><span class="admin-user-name">@${escapeHtml(u)}</span><button class="admin-btn danger" onclick="removeDeputyChiefModerator('${escapeHtml(u)}')"><i class="fa-solid fa-trash"></i> Убрать</button></div>`).join("") : `<div style="color:var(--text-muted);font-size:0.85rem;">Пока нет заместителей.</div>`}
+              ${deputyChiefModerators.length ? deputyChiefModerators.map(u => `<div class="admin-user-row"><span class="utag utag-DEPUTY_CHIEF_MODERATOR">DEPUTY CH. M.</span><span class="admin-user-name">@${escapeHtml(u)}</span><button class="admin-btn danger" onclick="removeDeputyChiefModerator('${escapeHtml(u)}')"><i class="fa-solid fa-trash"></i> Убрать</button></div>`).join("") : `<div style="color:var(--text-muted);font-size:0.85rem;">Пока нет заместителей.</div>`}
               <div class="admin-add-row">
                 <input type="text" id="newDeputyChiefModeratorInput" placeholder="@username заместителя" />
                 <button class="admin-btn" onclick="addDeputyChiefModerator()"><i class="fa-solid fa-plus"></i> Добавить</button>
               </div>
             </div>
             <div style="display:grid;gap:8px;margin-top:4px;">
-              <div style="font-weight:700;">♰ Модераторы</div>
+              <div style="font-weight:700;">☠ MODERATOR</div>
               <p style="color:var(--text-muted);font-size:0.78rem;">Муты, жалобы, управление разделами (без банов)</p>
               ${moderators.length ? moderators.map(u => `<div class="admin-user-row"><span class="utag utag-MODERATOR">MODERATOR</span><span class="admin-user-name">@${escapeHtml(u)}</span><button class="admin-btn danger" onclick="removeModerator('${escapeHtml(u)}')"><i class="fa-solid fa-trash"></i> Убрать</button></div>`).join("") : `<div style="color:var(--text-muted);font-size:0.85rem;">Пока нет модераторов.</div>`}
               <div class="admin-add-row">
@@ -7207,7 +7218,7 @@
               </div>
             </div>
             <div style="display:grid;gap:8px;">
-              <div style="font-weight:700;">✠ Владельцы</div>
+              <div style="font-weight:700;">⚔ OWNER</div>
               ${owners.length ? owners.map(u => `<div class="admin-user-row"><span class="utag utag-OWNER">OWNER</span><span class="admin-user-name">@${escapeHtml(u)}</span><button class="admin-btn danger" onclick="removeOwner('${escapeHtml(u)}')"><i class="fa-solid fa-trash"></i> Убрать</button></div>`).join("") : `<div style="color:var(--text-muted);font-size:0.85rem;">Пока нет владельцев.</div>`}
               <div class="admin-add-row">
                 <input type="text" id="newOwnerInput" placeholder="@username владельца" />
