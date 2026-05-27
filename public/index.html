@@ -2048,7 +2048,7 @@
       box-shadow: 0 0 8px rgba(144,202,249,0.2);
       animation: pulseBeginner 3.5s ease-in-out infinite;
     }
-    .utag-BEGINNER::before { content:"🔰"; font-size:0.65rem; }
+    .utag-BEGINNER::before { content:"🌱"; font-size:0.65rem; }
     @keyframes pulseBeginner {
       0%,100% { box-shadow: 0 0 8px rgba(144,202,249,0.2); border-color: rgba(144,202,249,0.35); }
       50% { box-shadow: 0 0 16px rgba(144,202,249,0.45), 0 0 28px rgba(144,202,249,0.15); border-color: rgba(144,202,249,0.65); }
@@ -2163,7 +2163,7 @@
       animation: pulseModerator 2.2s ease-in-out infinite, moderatorShift 4.2s ease-in-out infinite;
       text-shadow: 0 0 8px rgba(196,181,253,0.55);
     }
-    .utag-MODERATOR::before { content:"🛡️"; font-size:0.65rem; }
+    .utag-MODERATOR::before { content:"🏅"; font-size:0.65rem; }
     @keyframes pulseModerator {
       0%,100% { box-shadow: 0 0 12px rgba(167,139,250,0.35), 0 0 26px rgba(124,58,237,0.2), inset 0 0 8px rgba(196,181,253,0.08); border-color: rgba(167,139,250,0.55); }
       50% { box-shadow: 0 0 26px rgba(196,181,253,0.72), 0 0 50px rgba(139,92,246,0.35), inset 0 0 14px rgba(196,181,253,0.18); border-color: rgba(216,180,254,0.95); }
@@ -2184,7 +2184,7 @@
       text-shadow: 0 0 10px rgba(253,224,71,0.58);
       font-weight: 700;
     }
-    .utag-OWNER::before { content:"👑"; font-size:0.65rem; }
+    .utag-OWNER::before { content:"⚜️"; font-size:0.65rem; }
     @keyframes pulseOwner {
       0%,100% { box-shadow: 0 0 14px rgba(251,191,36,0.42), 0 0 30px rgba(245,158,11,0.22), inset 0 0 10px rgba(255,220,120,0.1); border-color: rgba(251,191,36,0.6); }
       50% { box-shadow: 0 0 30px rgba(253,224,71,0.85), 0 0 56px rgba(234,179,8,0.45), inset 0 0 16px rgba(255,241,150,0.25); border-color: rgba(255,236,120,1); }
@@ -2418,6 +2418,36 @@
       padding: 12px 14px;
       width: 100%;
       box-sizing: border-box;
+    }
+
+    /* Complaint modal select fix — long options no overflow */
+    #complaintOverlay .auth-modal {
+      width: min(520px, 94vw);
+    }
+    #complaintOverlay .paste-form-select {
+      width: 100%;
+      max-width: 100%;
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      padding: 12px 14px;
+      font-size: 0.9rem;
+      min-height: 48px;
+      appearance: auto;
+      -webkit-appearance: auto;
+      -moz-appearance: auto;
+    }
+    #complaintOverlay .paste-form-select option {
+      white-space: normal;
+      word-break: break-word;
+      padding: 6px 8px;
+      font-size: 0.88rem;
+    }
+    @media (max-width: 480px) {
+      #complaintOverlay .paste-form-select {
+        font-size: 0.82rem;
+        padding: 10px 10px;
+      }
     }
 
     .admin-stats-grid {
@@ -3088,19 +3118,40 @@
     .paste-type-question { background: rgba(245,158,11,0.15); color: #fcd34d; }
     .paste-type-discussion { background: rgba(16,185,129,0.15); color: #6ee7b7; }
 
-    /* Paste cards */
-    .paste-cards-list { display: grid; gap: 18px; }
+    /* Paste cards — upgraded to match mod-post-card premium glassmorphism */
+    .paste-cards-list { display: grid; gap: 20px; }
 
     .paste-card {
-      background: var(--bg-card);
-      border: 1px solid rgba(255,255,255,0.09);
-      border-radius: var(--radius);
-      padding: clamp(16px, 2vw, 24px);
-      transition: border-color 0.22s, box-shadow 0.22s;
+      background: linear-gradient(145deg, rgba(30,27,46,0.75), rgba(20,18,35,0.75));
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(139,92,246,0.15);
+      border-radius: 14px;
+      padding: clamp(18px, 2.5vw, 28px);
+      transition: border-color 0.25s, box-shadow 0.25s, transform 0.15s;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+      position: relative;
+      overflow: hidden;
+    }
+    .paste-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(139,92,246,0.3), transparent);
+      pointer-events: none;
     }
     .paste-card:hover {
-      border-color: rgba(139,92,246,0.4);
-      box-shadow: 0 6px 28px rgba(124,58,237,0.12);
+      border-color: rgba(139,92,246,0.35);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.3), 0 0 40px rgba(139,92,246,0.05);
+      transform: translateY(-2px);
+    }
+    .paste-card:active {
+      transform: scale(0.99);
+    }
+    .paste-card.has-pinned {
+      border-left: 3px solid #8b5cf6;
     }
     .paste-card-header {
       display: flex;
@@ -3109,22 +3160,23 @@
       margin-bottom: 12px;
     }
     .paste-avatar {
-      width: 42px; height: 42px;
+      width: 44px; height: 44px;
       border-radius: 50%;
       background: linear-gradient(135deg, var(--accent), #a855f7);
       display: grid;
       place-items: center;
       font-weight: 700;
-      font-size: 1rem;
+      font-size: 1.05rem;
       color: #fff;
       flex-shrink: 0;
-      box-shadow: 0 0 10px rgba(139,92,246,0.35);
+      box-shadow: 0 0 14px rgba(139,92,246,0.35);
+      position: relative;
     }
     .paste-avatar.anon-avatar {
       background: linear-gradient(135deg, #374151, #6b7280);
       box-shadow: none;
     }
-    .paste-meta { flex: 1; }
+    .paste-meta { flex: 1; min-width: 0; }
     .paste-author-line {
       display: flex;
       align-items: center;
@@ -3132,24 +3184,35 @@
       flex-wrap: wrap;
       margin-bottom: 2px;
     }
-    .paste-author-name { font-weight: 600; font-size: 0.97rem; }
-    .paste-date { font-size: 0.82rem; color: var(--text-muted); }
+    .paste-author-name { font-weight: 700; font-size: 0.97rem; color: #e0d4ff; }
+    .paste-date { font-size: 0.8rem; color: var(--text-muted); }
     .paste-topic-tag {
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 13px;
-      background: rgba(139,92,246,0.13);
-      border: 1px solid rgba(139,92,246,0.28);
+      gap: 8px;
+      padding: 8px 14px;
+      background: rgba(139,92,246,0.1);
+      border: 1px solid rgba(139,92,246,0.22);
       border-radius: 20px;
-      font-size: 0.86rem;
-      font-weight: 600;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #ddd6fe;
+      margin: 10px 0 8px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .paste-topic-tag:hover {
+      background: rgba(139,92,246,0.18);
+      border-color: rgba(139,92,246,0.4);
+    }
+    .paste-topic-tag i {
       color: #c4b5fd;
-      margin-bottom: 12px;
+      margin-right: 6px;
+      font-size: 0.85rem;
     }
     .paste-body {
-      color: var(--text-muted);
-      font-size: 0.97rem;
+      color: rgba(255,255,255,0.78);
+      font-size: 0.95rem;
       line-height: 1.7;
       white-space: pre-wrap;
       word-break: break-word;
@@ -3161,40 +3224,59 @@
       align-items: center;
       gap: 10px;
       padding-top: 12px;
-      border-top: 1px solid rgba(255,255,255,0.06);
+      border-top: 1px solid rgba(139,92,246,0.12);
+      flex-wrap: wrap;
     }
     .paste-reply-btn {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 7px 16px;
-      border-radius: 8px;
-      border: 1px solid rgba(139,92,246,0.35);
+      padding: 8px 18px;
+      border-radius: 10px;
+      border: 1px solid rgba(139,92,246,0.3);
       background: transparent;
       color: #c4b5fd;
       font-size: 0.88rem;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.18s, border-color 0.18s, color 0.18s;
+      transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+      min-height: 40px;
     }
     .paste-reply-btn:hover {
       background: rgba(139,92,246,0.14);
       border-color: rgba(139,92,246,0.65);
       color: #fff;
+      transform: translateY(-1px);
+    }
+    .paste-reply-btn:active {
+      transform: translateY(0);
+    }
+    .paste-reply-btn.primary {
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      border-color: transparent;
+      color: #fff;
+    }
+    .paste-reply-btn.primary:hover {
+      background: linear-gradient(135deg, #6d28d9, #5b21b6);
+      box-shadow: 0 4px 16px rgba(124,58,237,0.3);
     }
     /* Replies */
     .paste-replies {
       margin-top: 14px;
       display: grid;
       gap: 10px;
-      padding-left: 20px;
-      border-left: 2px solid rgba(139,92,246,0.28);
+      padding-left: 16px;
+      border-left: 2px solid rgba(139,92,246,0.2);
     }
     .paste-reply-card {
       background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.07);
+      border: 1px solid rgba(139,92,246,0.08);
       border-radius: 12px;
       padding: 12px 16px;
+      transition: border-color 0.2s;
+    }
+    .paste-reply-card:hover {
+      border-color: rgba(139,92,246,0.2);
     }
     .paste-reply-card .paste-avatar {
       width: 30px; height: 30px;
@@ -3207,9 +3289,71 @@
       text-align: center; padding: 48px 20px;
       color: var(--text-muted);
       border: 1px dashed rgba(139,92,246,0.25);
-      border-radius: var(--radius);
+      border-radius: 14px;
+      background: rgba(30,27,46,0.5);
     }
     .paste-empty i { display: block; font-size: 2.4rem; margin-bottom: 14px; color: rgba(139,92,246,0.45); }
+    
+    /* Premium "Перейти" button on forum cards */
+    .paste-go-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border-radius: 10px;
+      border: 1px solid rgba(139,92,246,0.4);
+      background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(124,58,237,0.06));
+      color: #c4b5fd;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      min-height: 40px;
+      font-family: inherit;
+    }
+    .paste-go-btn:hover {
+      background: linear-gradient(135deg, rgba(139,92,246,0.25), rgba(124,58,237,0.15));
+      border-color: rgba(139,92,246,0.7);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(124,58,237,0.2);
+      transform: translateY(-1px);
+    }
+    .paste-go-btn:active {
+      transform: translateY(0);
+    }
+    .paste-go-btn i {
+      font-size: 0.8rem;
+    }
+    
+    /* Premium status badges for forum cards */
+    .paste-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      font-family: 'Space Grotesk', sans-serif;
+      padding: 3px 10px;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      backdrop-filter: blur(4px);
+    }
+    .paste-status-badge.pending {
+      background: rgba(217,119,6,0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(217,119,6,0.3);
+    }
+    .paste-status-badge.read {
+      background: rgba(5,150,105,0.15);
+      color: #34d399;
+      border: 1px solid rgba(5,150,105,0.3);
+    }
+    .paste-status-badge.pinned {
+      background: rgba(124,58,237,0.2);
+      color: #c4b5fd;
+      border: 1px solid rgba(139,92,246,0.35);
+    }
 
     /* Section heading for pastes page */
     .pastes-section-head {
@@ -3714,7 +3858,7 @@
           <a class="nav-link" id="navMutesLink" href="/mutes" data-route="mutes" style="display:none;">Муты</a>
           <span class="nav-separator" aria-hidden="true"></span>
           <a class="nav-link" href="/usersearch" data-route="usersearch">Люди</a>
-          <a class="nav-link" href="/admin" data-route="admin" id="navAdminLink" style="display:none;color:#ff4444;">⚡ Админ</a>
+          <a class="nav-link" href="/admin" data-route="admin" id="navAdminLink" style="display:none;color:#ff4444;">💎 Админ</a>
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="Переключить тему">
             <i class="fa-solid fa-sun" id="themeIcon"></i>
           </button>
@@ -3831,7 +3975,7 @@
         <!-- Forum hero with search -->
         <div class="paste-search-hero">
           <div class="container">
-            <h1>🗨️ Форум</h1>
+            <h1>            💬 Форум</h1>
             <p>Публикуй посты, задавай вопросы и запускай обсуждения — анонимно или от своего имени</p>
             <div class="search-input-wrap">
               <i class="fa-solid fa-magnifying-glass search-icon"></i>
@@ -4169,7 +4313,7 @@
   <div class="auth-modal-overlay" id="muteOverlay" aria-modal="true" role="dialog">
     <div class="auth-modal">
       <button class="auth-modal-close" type="button" aria-label="Закрыть" onclick="closeMuteModal()">×</button>
-      <h2>🔇 Выдать мут</h2>
+      <h2>🔕 Выдать мут</h2>
       <p class="auth-modal-sub">Укажите длительность и причину мута для пользователя</p>
       <div class="auth-error" id="muteError"></div>
       <div class="auth-success" id="muteSuccess"></div>
@@ -4784,7 +4928,7 @@
       // Mute check
       const sessMute = getSession();
       if (sessMute && isUserMuted(sessMute.username)) {
-        spamShowError(document.getElementById(`replyForm-${section}-${qi}`), "🔇 Вы в муте! Нельзя писать.");
+        spamShowError(document.getElementById(`replyForm-${section}-${qi}`), "🔕 Вы в муте! Нельзя писать.");
         return;
       }
 
@@ -5025,7 +5169,7 @@
           // Mute check
           const sess = getSession();
           if (sess && isUserMuted(sess.username)) {
-            spamShowError(form, "🔇 Вы в муте! Нельзя писать до снятия.");
+            spamShowError(form, "🔕 Вы в муте! Нельзя писать до снятия.");
             return;
           }
 
@@ -5869,7 +6013,7 @@
       if (appCache.banned) {
         const container = document.querySelector("#page-home .container") || document.querySelector(".container");
         if (container) {
-          container.innerHTML = `<div style="text-align:center;padding:80px 20px;"><div style="font-size:4rem;margin-bottom:20px;">⛔</div><h2>Ваш аккаунт заблокирован</h2><p style="color:var(--text-muted);margin-top:12px;">Вы не можете выполнять действия на форуме. Обратитесь к администратору.</p></div>`;
+          container.innerHTML = `<div style="text-align:center;padding:80px 20px;"><div style="font-size:4rem;margin-bottom:20px;">🚫</div><h2>Ваш аккаунт заблокирован</h2><p style="color:var(--text-muted);margin-top:12px;">Вы не можете выполнять действия на форуме. Обратитесь к администратору.</p></div>`;
         }
       }
       updateNavForUser();
@@ -5894,11 +6038,11 @@
 
     /* All possible tags */
     const ALL_TAGS = {
-      "BEGINNER":   { emoji:"🔰", color:"#90caf9", unlockMode:"auto",  desc:"Выдаётся при регистрации" },
+      "BEGINNER":   { emoji:"🌱", color:"#90caf9", unlockMode:"auto",  desc:"Выдаётся при регистрации" },
       "OSINT'ER":   { emoji:"⚡", color:"#e040fb", unlockMode:"free", desc:"Тег OSINT-специалиста — выберите в профиле" },
-      "ADMIN":      { emoji:"⚡", color:"#ff2222", unlockMode:"admin", desc:"Только для администраторов" },
-      "MODERATOR":  { emoji:"🛡️", color:"#7e22ce", unlockMode:"admin", desc:"Тег для модераторов" },
-      "OWNER":      { emoji:"👑", color:"#f59e0b", unlockMode:"admin", desc:"Тег владельца сообщества" },
+      "ADMIN":      { emoji:"💎", color:"#ff2222", unlockMode:"admin", desc:"Только для администраторов" },
+      "MODERATOR":  { emoji:"🏅", color:"#7e22ce", unlockMode:"admin", desc:"Тег для модераторов" },
+      "OWNER":      { emoji:"⚜️", color:"#f59e0b", unlockMode:"admin", desc:"Тег владельца сообщества" },
       "GEOINT'ER":  { emoji:"🌍", color:"#66bb6a", unlockMode:"free",  desc:"Геопространственная разведка" },
       "CSINT'ER":   { emoji:"💻", color:"#42a5f5", unlockMode:"free",  desc:"Разведка с открытых источников" },
       "HUMINT'ER":  { emoji:"🕵️", color:"#ef9a9a", unlockMode:"free",  desc:"Разведка на основе людей" },
@@ -6121,20 +6265,20 @@
       const profile = !post.anonymous && post.author ? getUserProfile(post.author) : null;
       const authorTags = profile ? renderUserTagsHtml(profile) : (post.author ? renderUserTagsHtml({ activeTags:getUserTags(post.author)}) : "");
       const typeInfo = PASTE_TYPES[post.type] || PASTE_TYPES.paste;
-      const threadActions = isAdm ? `<div class="thread-actions"><button class="admin-btn warn" onclick="menuSetStatus(${threadId},'pending')">На рассмотрении</button><button class="admin-btn ok" onclick="menuSetStatus(${threadId},'read')">Прочитано</button><button class="admin-btn info" onclick="menuPinPost(${threadId})">${post._pinned? 'Открепить':'Закрепить'}</button></div>` : "";
+      const threadActions = isAdm ? `<div class="thread-actions"><button class="admin-btn warn" onclick="menuSetStatus(${threadId},'pending')">⏳ На рассмотрении</button><button class="admin-btn ok" onclick="menuSetStatus(${threadId},'read')">✓ Прочитано</button><button class="admin-btn info" onclick="menuPinPost(${threadId})">📌 ${post._pinned? 'Открепить':'Закрепить'}</button></div>` : "";
       container.innerHTML = `
         <div class="thread-header">
-          <div class="thread-breadcrumbs"><a href="/forum" onclick="event.preventDefault();navigateTo('forum');">Форум</a> · <a href="#thread-card-${threadId}" onclick="event.preventDefault();document.getElementById('thread-card-${threadId}')?.scrollIntoView({behavior:'smooth'});">${escapeHtml(typeInfo.label)}</a></div>
+          <div class="thread-breadcrumbs"><a href="/forum" onclick="event.preventDefault();navigateTo('forum');">← Назад к форуму</a></div>
           <h1>${post._pinned ? '📌 ' : ''}${escapeHtml(post.topic)}</h1>
           <div class="thread-meta">
-            <span>Автор: ${escapeHtml(author)}</span>
-            <span>${pasteFormatDate(post.date)}</span>
-            <span>${replies.length} ${replies.length===1? 'ответ':'ответов'}</span>
+            <span><i class="fa-regular fa-user"></i> ${escapeHtml(author)}</span>
+            <span><i class="fa-regular fa-clock"></i> ${pasteFormatDate(post.date)}</span>
+            <span><i class="fa-regular fa-comment"></i> ${replies.length} ${replies.length===1? 'ответ':'ответов'}</span>
           </div>
           ${threadActions}
           ${(isAdm || isOwn) ? `<button class="admin-btn danger" onclick="deleteThreadFromPage(${threadId})" style="margin-top:14px;margin-bottom:12px;"><i class="fa-solid fa-trash"></i> Удалить тему</button>` : ''}
         </div>
-        <div class="thread-card" id="thread-card-${threadId}">
+        <div class="paste-card${post._pinned ? ' has-pinned' : ''}" id="thread-card-${threadId}" style="margin-top:18px;">
           <div class="paste-card-header">
             <div class="paste-avatar">${pasteInitial(post.anonymous ? 'А' : post.author)}</div>
             <div class="paste-meta">
@@ -6145,13 +6289,13 @@
           ${authorTags}
           <div class="paste-body" style="margin-top:16px;">${pasteEscape(post.text)}</div>
           <div style="margin-top:18px;">${buildReactionsBar('post_'+threadId, session ? session.username : 'anon')}</div>
-          <div class="thread-footer" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;">
+          <div class="paste-actions" style="margin-top:20px;">
             <button class="paste-reply-btn" onclick="togglePasteReplyForm(${threadId})"><i class="fa-solid fa-reply"></i> Ответить</button>
-            <button class="paste-reply-btn info" onclick="openComplaintModal(${threadId})"><i class="fa-solid fa-flag"></i> Пожаловаться</button>
+            <button class="paste-reply-btn" onclick="openComplaintModal(${threadId})"><i class="fa-regular fa-flag"></i> Пожаловаться</button>
           </div>
         </div>
         <div class="thread-replies">
-          <h2>Ответы (${replies.length})</h2>
+          <h2 style="font-size:1.2rem;font-weight:700;margin-bottom:16px;color:#ddd6fe;display:flex;align-items:center;gap:8px;"><i class="fa-regular fa-comments"></i> Ответы (${replies.length})</h2>
           ${replies.length ? replies.map((r, ri) => {
             const rauthor = r.anonymous ? 'Аноним' : (r.author || 'Аноним');
             const rprofile = !r.anonymous && r.author ? getUserProfile(r.author) : null;
@@ -6166,7 +6310,7 @@
                     <span class="paste-date">${pasteFormatDate(r.date)}</span>
                   </div>
                 </div>
-                ${canDelReply ? `<button class="post-menu-btn" onclick="deleteReplyFromThread(${threadId},${ri})" title="Удалить ответ" style="font-size:0.8rem;padding:2px 8px;">🗑️</button>` : ''}
+                ${canDelReply ? `<button class="post-menu-btn" onclick="deleteReplyFromThread(${threadId},${ri})" title="Удалить ответ" style="font-size:0.8rem;padding:2px 8px;"><i class="fa-solid fa-trash-can"></i></button>` : ''}
               </div>
               ${rprofile ? renderUserTagsHtml(rprofile) : ''}
               <div class="paste-body">${pasteEscape(r.text)}</div>
@@ -6325,7 +6469,7 @@
       if (!container) return;
       const session = getSession();
       if (!session || !isModeratorOrAdmin(session.username)) {
-        container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">🔇</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут управлять мутами.</p></div>`;
+        container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">🔕</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут управлять мутами.</p></div>`;
         return;
       }
 
@@ -6337,7 +6481,7 @@
       if (!mutes.length) {
         container.innerHTML = `
           <div class="profile-card" style="text-align:center;padding:60px 40px;">
-            <div style="font-size:3rem;margin-bottom:16px;">🔇</div>
+            <div style="font-size:3rem;margin-bottom:16px;">🔕</div>
             <h2 style="margin-bottom:8px;">Управление мутами</h2>
             <p style="color:var(--text-muted);margin-bottom:4px;">Нет активных мутов.</p>
             <p style="color:var(--text-muted);font-size:0.9rem;">Используйте меню <strong>⋯</strong> на постах пользователей, чтобы выдать мут.</p>
@@ -6362,7 +6506,7 @@
                 : '—';
               return `<div class="mod-post-card ${isExpired ? 'status-read' : 'status-new'}">
                 <div class="mod-post-meta">
-                  <span class="mod-post-author" style="font-size:1rem;">🔇 @${escapeHtml(m.username)}</span>
+                  <span class="mod-post-author" style="font-size:1rem;">🔕 @${escapeHtml(m.username)}</span>
                   <span class="mod-post-date">${createdStr}</span>
                   <span class="mod-status-badge ${isExpired ? 'read' : 'new'}">${isExpired ? 'Истёк' : 'Активен'}</span>
                 </div>
@@ -6389,7 +6533,7 @@
       if (!container) return;
       const session = getSession();
       if (!session || !isModeratorOrAdmin(session.username)) {
-        container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">⛔</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут просматривать жалобы.</p></div>`;
+        container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">🚫</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут просматривать жалобы.</p></div>`;
         return;
       }
       const complaints = getComplaints();
@@ -6826,7 +6970,7 @@
 
       if (!session || !isAdmin(session.username)) {
         container.innerHTML = `<div style="text-align:center;padding:80px 0;">
-          <div style="font-size:3rem;margin-bottom:16px;">⛔</div>
+          <div style="font-size:3rem;margin-bottom:16px;">🚫</div>
           <h2>Доступ запрещён</h2>
           <p style="color:var(--text-muted);margin-top:12px;">Только администраторы могут просматривать эту страницу.</p>
         </div>`;
@@ -6881,7 +7025,7 @@
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                       <span style="font-weight:700;">@${escapeHtml(u.username)}</span>
                       ${adm ? `<span class="utag utag-ADMIN" style="font-size:0.58rem;padding:1px 6px;">ADMIN</span>` : ""}
-                      ${banned ? `<span class="banned-badge">⛔ БАН</span>` : ""}
+                      ${banned ? `<span class="banned-badge">🚫 БАН</span>` : ""}
                     </div>
                     <div style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(u.nickname||"")} · ${new Date(u.createdAt).toLocaleDateString("ru-RU")}</div>
                   </div>
@@ -7967,7 +8111,7 @@
               banned.push(author.toLowerCase());
               appCache.banned = banned;
             }
-            showReplyToast("⛔ @" + author + " заблокирован!");
+            showReplyToast("🚫 @" + author + " заблокирован!");
           } else {
             alert(data.error || "Ошибка бана.");
           }
@@ -8051,9 +8195,9 @@
         const initial = pasteInitial(isAnon ? "А" : p.author);
         const replyCount = p.replies?.length || 0;
         const viewCount = views[postKey] || 0;
-        const statusDot = p._status === "pending" ? `<span style="margin-left:6px;font-size:0.7rem;background:rgba(217,119,6,0.2);color:#fbbf24;border:1px solid rgba(217,119,6,0.4);border-radius:10px;padding:1px 7px;">⏳ На рассмотрении</span>` :
-                          p._status === "read" ? `<span style="margin-left:6px;font-size:0.7rem;background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.4);border-radius:10px;padding:1px 7px;">✓ Прочитано</span>` : "";
-        const pinnedBadge = p._pinned ? `<span style="font-size:0.7rem;background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid rgba(139,92,246,0.4);border-radius:10px;padding:1px 7px;margin-right:6px;">📌 Закреплено</span>` : "";
+        const statusDot = p._status === "pending" ? `<span class="paste-status-badge pending">⏳ На рассмотрении</span>` :
+                          p._status === "read" ? `<span class="paste-status-badge read">✓ Прочитано</span>` : "";
+        const pinnedBadge = p._pinned ? `<span class="paste-status-badge pinned">📌 Закреплено</span>` : "";
 
         const repliesHtml = (p.replies || []).map(r => {
           const rAuthor = r.anonymous ? "Аноним" : (r.author || "Аноним");
@@ -8114,7 +8258,7 @@
           </div>
         </div>`;
 
-        return `<div class="paste-card" data-paste-idx="${realIdx}" data-viewed="0">
+        return `<div class="paste-card${p._pinned ? ' has-pinned' : ''}" data-paste-idx="${realIdx}" data-viewed="0">
           <div class="paste-card-header">
             <div class="${isAnon ? "paste-avatar anon-avatar" : "paste-avatar"}">${initial}</div>
             <div class="paste-meta">
@@ -8128,8 +8272,8 @@
             ${menuHtml}
           </div>
           ${!isAnon && p.author ? renderUserTagsHtml(getUserProfile(p.author) || {activeTags: getUserTags(p.author)}) : ""}
-          <div class="paste-topic-tag" onclick="openThreadPage(${realIdx})" style="cursor:pointer;font-size:1.05rem;font-weight:700;color:var(--text-main);margin-top:10px;margin-bottom:4px;">
-            ${pinnedBadge}<i class="fa-solid fa-tag" style="color:#c4b5fd;margin-right:6px;font-size:0.85rem;"></i>${pasteEscape(p.topic)}
+          <div class="paste-topic-tag" onclick="openThreadPage(${realIdx})">
+            ${pinnedBadge}<i class="fa-solid fa-tag"></i>${pasteEscape(p.topic)}
           </div>
           <div class="paste-body">${pasteEscape(p.text)}</div>
           <div class="forum-thread-stats">
@@ -8141,6 +8285,9 @@
           <div class="paste-actions">
             <button class="paste-reply-btn" onclick="togglePasteReplyForm(${realIdx})">
               <i class="fa-solid fa-reply"></i> Ответить${replyCount > 0 ? ` <span style="opacity:0.65;font-weight:400;margin-left:2px;">(${replyCount})</span>` : ""}
+            </button>
+            <button class="paste-go-btn" onclick="openThreadPage(${realIdx})">
+              <i class="fa-solid fa-arrow-right"></i> Перейти
             </button>
           </div>
           ${repliesHtml ? `<div class="paste-replies">${repliesHtml}</div>` : ""}
@@ -8224,7 +8371,7 @@
       // Mute check
       const session = pasteGetCurrentUser();
       if (session && isUserMuted(session.username)) {
-        showReplyToast("🔇 Вы в муте! Нельзя писать.");
+        showReplyToast("🔕 Вы в муте! Нельзя писать.");
         return;
       }
 
@@ -8402,7 +8549,7 @@
         if (session && isUserMuted(session.username)) {
           const statusEl = document.getElementById("forumPostStatus");
           if (statusEl) {
-            statusEl.textContent = "🔇 Вы в муте! Нельзя писать до снятия.";
+            statusEl.textContent = "🔕 Вы в муте! Нельзя писать до снятия.";
             statusEl.style.color = "#fca5a5";
             setTimeout(() => { statusEl.textContent = ""; }, 4000);
           }
