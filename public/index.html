@@ -3702,6 +3702,10 @@
         <div class="container pastes-wrap">
           <!-- Forum post form -->
           <div class="paste-form-card forum-post-card">
+            <div id="forumMuteBanner" style="display:none;background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.3);border-radius:12px;padding:14px 18px;margin-bottom:16px;text-align:center;">
+              <i class="fa-solid fa-volume-off" style="color:#f87171;margin-right:8px;"></i>
+              <span style="color:#fca5a5;font-weight:600;">Вы в муте! Нельзя создавать сообщения до снятия.</span>
+            </div>
             <div class="forum-form-header">
               <div class="forum-form-icon"><i class="fa-solid fa-pen-nib"></i></div>
               <div>
@@ -3851,6 +3855,10 @@
           </div>
           <div class="section-form-wrap">
             <h3><i class="fa-solid fa-pen-to-square" style="color:#c4b5fd;margin-right:8px;"></i>Новое сообщение</h3>
+            <div id="servicesMuteBanner" style="display:none;background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.3);border-radius:12px;padding:12px 16px;margin-bottom:14px;text-align:center;font-size:0.9rem;">
+              <i class="fa-solid fa-volume-off" style="color:#f87171;margin-right:6px;"></i>
+              <span style="color:#fca5a5;font-weight:600;">Вы в муте! Нельзя писать.</span>
+            </div>
             <form class="section-form" id="servicesForm">
               <div class="section-form-author">
                 <input type="text" id="servicesAuthorInput" placeholder="Ваше имя (необязательно)" maxlength="40" />
@@ -3878,6 +3886,10 @@
           </div>
           <div class="section-form-wrap">
             <h3><i class="fa-solid fa-pen-to-square" style="color:#c4b5fd;margin-right:8px;"></i>Новое обращение</h3>
+            <div id="moderatorsMuteBanner" style="display:none;background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.3);border-radius:12px;padding:12px 16px;margin-bottom:14px;text-align:center;font-size:0.9rem;">
+              <i class="fa-solid fa-volume-off" style="color:#f87171;margin-right:6px;"></i>
+              <span style="color:#fca5a5;font-weight:600;">Вы в муте! Нельзя писать.</span>
+            </div>
             <form class="section-form" id="moderatorsForm">
               <div class="section-form-author">
                 <input type="text" id="moderatorsAuthorInput" placeholder="Ваше имя (необязательно)" maxlength="40" />
@@ -4589,6 +4601,14 @@
 
     function submitReply(section, qi) {
       if (!ddosTrackSubmit()) return;
+      
+      // Mute check
+      const sessMute = getSession();
+      if (sessMute && isUserMuted(sessMute.username)) {
+        spamShowError(document.getElementById(`replyForm-${section}-${qi}`), "🔇 Вы в муте! Нельзя писать.");
+        return;
+      }
+
       const authorEl = document.getElementById(`replyAuthor-${section}-${qi}`);
       const textEl = document.getElementById(`replyText-${section}-${qi}`);
       const formEl = document.getElementById(`replyForm-${section}-${qi}`);
@@ -4795,6 +4815,13 @@
 
         renderQuestionList(section);
 
+        // Mute banner
+        const muteBanner = document.getElementById(section + 'MuteBanner');
+        const sessM = getSession();
+        if (muteBanner) {
+          muteBanner.style.display = (sessM && isUserMuted(sessM.username)) ? 'block' : 'none';
+        }
+
         if (!form || !textarea) return;
 
         form.addEventListener("submit", async (event) => {
@@ -4815,6 +4842,13 @@
             const rateData = await rateRes.json();
             if (!rateData.ok) { return; }
           } catch(e) {}
+
+          // Mute check
+          const sess = getSession();
+          if (sess && isUserMuted(sess.username)) {
+            spamShowError(form, "🔇 Вы в муте! Нельзя писать до снятия.");
+            return;
+          }
 
           try {
             const res = await fetch('/api/sections/' + encodeURIComponent(section), {
@@ -5774,7 +5808,7 @@
 
     function cleanupExpiredMutes() {
       const now = Date.now();
-      const mutes = getMutes().filter(m => !m.expiresAt || new Date(m.expires_at).getTime() > now);
+      const mutes = getMutes().filter(m => !m.expires_at || new Date(m.expires_at).getTime() > now);
       return mutes;
     }
 
@@ -7982,8 +8016,14 @@
         return;
       }
       
-      const anonymous = form.querySelector(".pr-anon").checked;
+      // Mute check
       const session = pasteGetCurrentUser();
+      if (session && isUserMuted(session.username)) {
+        showReplyToast("🔇 Вы в муте! Нельзя писать.");
+        return;
+      }
+
+      const anonymous = form.querySelector(".pr-anon").checked;
       
       // Если не вошёл в систему, то всегда анонимно
       const isAnon = anonymous || !session;
@@ -8097,6 +8137,13 @@
     window.updateForumAnonUI = function() {
       const anon = document.getElementById("newPasteAnon")?.checked;
       const session = pasteGetCurrentUser();
+      
+      // Mute banner
+      const muteBanner = document.getElementById("forumMuteBanner");
+      if (muteBanner) {
+        muteBanner.style.display = (session && isUserMuted(session.username)) ? 'block' : 'none';
+      }
+
       const avatarEl = document.getElementById("forumAnonAvatar");
       const nameEl = document.getElementById("forumAnonUserName");
       if (!avatarEl || !nameEl) return;
@@ -8145,6 +8192,18 @@
         const hp = form.querySelector(".hp-field");
         if (hp && hp.value.trim()) return;
 
+        // Mute check
+        const session = pasteGetCurrentUser();
+        if (session && isUserMuted(session.username)) {
+          const statusEl = document.getElementById("forumPostStatus");
+          if (statusEl) {
+            statusEl.textContent = "🔇 Вы в муте! Нельзя писать до снятия.";
+            statusEl.style.color = "#fca5a5";
+            setTimeout(() => { statusEl.textContent = ""; }, 4000);
+          }
+          return;
+        }
+
         const type = document.getElementById("newPasteType").value;
         const topic = document.getElementById("newPasteTopic").value.trim();
         const text = document.getElementById("newPasteText").value.trim();
@@ -8172,7 +8231,6 @@
         } catch(e) {}
 
         // Get author from session (no manual input field)
-        const session = pasteGetCurrentUser();
         const author = anonymous ? "" : (session ? session.nickname || session.username : "");
 
         const pastes = getPastes();

@@ -277,6 +277,11 @@ function isBanned(username) {
   if (!username) return false;
   return !!db.prepare("SELECT username FROM banned_users WHERE username=?").get(username.toLowerCase());
 }
+function isMuted(username) {
+  if (!username) return false;
+  const row = db.prepare("SELECT expires_at FROM muted_users WHERE username=? AND (expires_at IS NULL OR expires_at > datetime('now'))").get(username.toLowerCase());
+  return !!row;
+}
 
 function hashPassword(pw) {
   return crypto.createHash('sha256').update(pw + 'osint_salt_42').digest('hex');
@@ -455,6 +460,8 @@ app.post('/api/threads', (req, res) => {
   const { type, topic, text, anonymous } = req.body;
   if (!topic?.trim() || !text?.trim())
     return res.json({ ok: false, error: 'Заполните тему и текст.' });
+  if (req.user && isMuted(req.user.username))
+    return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   const author_id = req.user?.id || null;
   const info = db.prepare(
     `INSERT INTO threads (type, topic, text, author_id, anonymous) VALUES (?,?,?,?,?)`
@@ -466,6 +473,8 @@ app.post('/api/threads', (req, res) => {
 app.post('/api/threads/:id/replies', (req, res) => {
   const { text, anonymous } = req.body;
   if (!text?.trim()) return res.json({ ok: false, error: 'Пустой ответ.' });
+  if (req.user && isMuted(req.user.username))
+    return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   if (!db.prepare('SELECT id FROM threads WHERE id=?').get(req.params.id))
     return res.json({ ok: false, error: 'Тема не найдена.' });
   const info = db.prepare(
@@ -544,6 +553,8 @@ app.get('/api/sections/:section', (req, res) => {
 app.post('/api/sections/:section', (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.json({ ok: false, error: 'Пустое сообщение.' });
+  if (req.user && isMuted(req.user.username))
+    return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   const info = db.prepare(
     `INSERT INTO section_posts (section, text, author_id) VALUES (?,?,?)`
   ).run(req.params.section, text.trim(), req.user?.id || null);
@@ -569,6 +580,8 @@ app.patch('/api/user/theme', (req, res) => {
 app.post('/api/sections/:section/:postId/replies', (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.json({ ok: false, error: 'Пустой ответ.' });
+  if (req.user && isMuted(req.user.username))
+    return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   db.prepare(
     `INSERT INTO section_replies (post_id, text, author_id) VALUES (?,?,?)`
   ).run(req.params.postId, text.trim(), req.user?.id || null);
