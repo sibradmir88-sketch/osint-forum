@@ -4838,23 +4838,25 @@
         const origIdx = questions.indexOf(q);
         const authorName = escapeHtml(q.author || "Аноним");
         const initial = getInitial(q.author || "А");
-        const statusDot = q._status === "pending" ? `<span style="margin-left:6px;font-size:0.7rem;background:rgba(217,119,6,0.2);color:#fbbf24;border:1px solid rgba(217,119,6,0.4);border-radius:10px;padding:1px 7px;">⏳ На рассмотрении</span>` :
-                          q._status === "read" ? `<span style="margin-left:6px;font-size:0.7rem;background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.4);border-radius:10px;padding:1px 7px;">✓ Прочитано</span>` : "";
-        const pinnedBadge = q._pinned ? `<span style="font-size:0.7rem;background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid rgba(139,92,246,0.4);border-radius:10px;padding:1px 7px;margin-right:6px;">📌 Закреплено</span>` : "";
+        const statusDot = q._status === "pending" ? `<span class="paste-status-badge pending">⏳ На рассмотрении</span>` :
+                          q._status === "read" ? `<span class="paste-status-badge read">✓ Прочитано</span>` : "";
+        const pinnedBadge = q._pinned ? `<span class="paste-status-badge pinned">📌 Закреплено</span>` : "";
         const repliesHtml = (q.replies || []).map(r => {
           const rName = escapeHtml(r.author || "Аноним");
           const rInit = getInitial(r.author || "А");
           return `
-            <div class="reply-card">
-              <div class="post-header">
-                <div class="post-avatar">${rInit}</div>
-                <div class="post-author-info">
-                  <span class="post-author-name">${rName}</span>
-                  <span class="post-date">${formatDate(r.date)}</span>
+            <div class="paste-reply-card">
+              <div class="paste-card-header">
+                <div class="paste-avatar" style="width:30px;height:30px;font-size:0.82rem;">${rInit}</div>
+                <div class="paste-meta">
+                  <div class="paste-author-line">
+                    <span class="paste-author-name">${rName}</span>
+                    <span class="paste-date">${formatDate(r.date)}</span>
+                  </div>
                 </div>
               </div>
               ${r.author && !r.anonymous ? renderUserTagsHtml(getUserProfile(r.author) || {activeTags: getUserTags(r.author)}) : ""}
-              <div class="post-body">${escapeHtml(r.text)}</div>
+              <div class="paste-body">${escapeHtml(r.text)}</div>
             </div>`;
         }).join("");
 
@@ -4878,34 +4880,38 @@
         </div>`;
 
         return `
-          <div class="post-card" data-qi="${origIdx}" data-section="${section}">
-            <div class="post-header">
-              <div class="post-avatar">${initial}</div>
-              <div class="post-author-info">
-                <span class="post-author-name">${pinnedBadge}${authorName} ${statusDot}</span>
-                <span class="post-date">${formatDate(q.date)}</span>
+          <div class="paste-card${q._pinned ? ' has-pinned' : ''}" data-qi="${origIdx}" data-section="${section}">
+            <div class="paste-card-header">
+              <div class="paste-avatar">${initial}</div>
+              <div class="paste-meta">
+                <div class="paste-author-line">
+                  <span class="paste-author-name">${authorName}</span>
+                  ${statusDot}
+                </div>
+                <div class="paste-date">${formatDate(q.date)}</div>
               </div>
               ${menuHtml}
             </div>
+            ${pinnedBadge}
             ${q.author && !q.anonymous ? renderUserTagsHtml(getUserProfile(q.author) || {activeTags: getUserTags(q.author)}) : ""}
-            <div class="post-body">${escapeHtml(q.text)}</div>
-            <div class="post-actions">
-              <button class="reply-btn" onclick="toggleReplyForm(this, '${section}', ${qi})">
+            <div class="paste-body">${escapeHtml(q.text)}</div>
+            <div class="paste-actions">
+              <button class="paste-reply-btn" onclick="toggleReplyForm(this, '${section}', ${qi})">
                 <i class="fa-solid fa-reply"></i> Ответить
                 ${(q.replies||[]).length > 0 ? `<span style="opacity:0.65;font-weight:400;margin-left:2px;">(${q.replies.length})</span>` : ""}
               </button>
             </div>
-            ${(q.replies||[]).length > 0 ? `<div class="replies-list">${repliesHtml}</div>` : ""}
-            <div class="reply-form-wrap" id="replyForm-${section}-${qi}">
-              <div class="section-form-author">
-                <input type="text" id="replyAuthor-${section}-${qi}" placeholder="Ваше имя (необязательно)" maxlength="40" />
+            ${(q.replies||[]).length > 0 ? `<div class="paste-replies">${repliesHtml}</div>` : ""}
+            <div class="paste-reply-form" id="replyForm-${section}-${qi}">
+              <div class="section-form-author" style="margin-bottom:10px;">
+                <input type="text" id="replyAuthor-${section}-${qi}" placeholder="Ваше имя (необязательно)" maxlength="40" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(139,92,246,0.25);background:rgba(255,255,255,0.05);color:#fff;font-family:inherit;outline:none;box-sizing:border-box;" />
               </div>
-              <textarea id="replyText-${section}-${qi}" placeholder="Напишите ответ..." rows="3"></textarea>
-              <div class="reply-form-actions">
-                <button class="reply-submit-btn" onclick="submitReply('${section}', ${qi})">
+              <textarea id="replyText-${section}-${qi}" placeholder="Напишите ответ..." rows="3" class="pr-text"></textarea>
+              <div class="paste-reply-actions">
+                <button type="button" class="paste-reply-submit" onclick="submitReply('${section}', ${qi})">
                   <i class="fa-solid fa-paper-plane"></i> Отправить
                 </button>
-                <button class="reply-cancel-btn" onclick="toggleReplyForm(null, '${section}', ${qi})">Отмена</button>
+                <button type="button" class="paste-reply-cancel" onclick="toggleReplyForm(null, '${section}', ${qi})">Отмена</button>
               </div>
             </div>
           </div>`;
