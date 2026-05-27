@@ -6566,10 +6566,70 @@
       const session = getSession();
       if (!session || !isModeratorOrAdmin(session.username)) {
         container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">⛓</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут управлять мутами.</p></div>`;
+        return;
+      }
 
-      } else if (route === "complaints") {
-        if (!session || !isModeratorOrAdmin(session.username)) {
-          container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">⛝</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут просматривать жалобы.</p></div>`;
+      const mutes = getMutes();
+      const now = Date.now();
+      const activeMutes = mutes.filter(m => !m.expires_at || new Date(m.expires_at).getTime() > now);
+      const expiredMutes = mutes.filter(m => m.expires_at && new Date(m.expires_at).getTime() <= now);
+
+      if (!mutes.length) {
+        container.innerHTML = `
+          <div class="profile-card" style="text-align:center;padding:60px 40px;">
+            <div style="font-size:3rem;margin-bottom:16px;">⛓</div>
+            <h2 style="margin-bottom:8px;">Управление мутами</h2>
+            <p style="color:var(--text-muted);margin-bottom:4px;">Нет активных мутов.</p>
+            <p style="color:var(--text-muted);font-size:0.9rem;">Используйте меню <strong>⋯</strong> на постах пользователей, чтобы выдать мут.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="profile-card">
+          <div class="admin-section-title">
+            <i class="fa-solid fa-volume-off" style="color:#f472b6;"></i> Управление мутами
+            <span style="font-size:0.85rem;font-weight:400;color:var(--text-muted);margin-left:10px;">${activeMutes.length} активных</span>
+          </div>
+          <div style="display:grid;gap:10px;">
+            ${mutes.map(m => {
+              const isExpired = m.expires_at && new Date(m.expires_at).getTime() <= now;
+              const expiresStr = m.expires_at
+                ? new Date(m.expires_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+                : 'Навсегда';
+              const createdStr = m.created_at
+                ? new Date(m.created_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+                : '—';
+              return `<div class="mod-post-card ${isExpired ? 'status-read' : 'status-new'}">
+                <div class="mod-post-meta">
+                  <span class="mod-post-author" style="font-size:1rem;">⛓ @${escapeHtml(m.username)}</span>
+                  <span class="mod-post-date">${createdStr}</span>
+                  <span class="mod-status-badge ${isExpired ? 'read' : 'new'}">${isExpired ? 'Истёк' : 'Активен'}</span>
+                </div>
+                <div class="mod-post-text">
+                  <strong>Причина:</strong> ${m.reason ? escapeHtml(m.reason) : '<span style="color:var(--text-muted);font-style:italic;">не указана</span>'}<br>
+                  <strong>Истекает:</strong> ${expiresStr}<br>
+                  <strong>Выдал:</strong> ${m.muted_by ? '@' + escapeHtml(m.muted_by) : '<span style="color:var(--text-muted);font-style:italic;">—</span>'}
+                </div>
+                <div class="mod-post-actions">
+                  ${!isExpired ? `<button class="admin-btn danger" onclick="unmuteUser('${escapeHtml(m.username)}')"><i class="fa-solid fa-volume-up"></i> Размут</button>` : `<button class="admin-btn info" onclick="unmuteUser('${escapeHtml(m.username)}')"><i class="fa-solid fa-rotate-left"></i> Удалить</button>`}
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+        ${expiredMutes.length > 0 ? `<div class="profile-card" style="margin-top:16px;">
+          <div class="admin-section-title" style="opacity:0.7;"><i class="fa-regular fa-clock"></i> Истёкшие мутов (${expiredMutes.length})</div>
+        </div>` : ''}
+      `;
+    }
+
+    function renderComplaintsPage() {
+      const container = document.getElementById("complaintsPageContent");
+      if (!container) return;
+      const session = getSession();
+      if (!session || !isModeratorOrAdmin(session.username)) {
+        container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">⛝</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут просматривать жалобы.</p></div>`;
         return;
       }
       const complaints = getComplaints();
