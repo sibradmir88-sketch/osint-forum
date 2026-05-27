@@ -116,3 +116,43 @@ git push
 3. Убедись, что Volume примонтирован (`/data`)
 4. Если БД повреждена — восстанови из бекапа
 5. Если ничего не помогло — удали Volume и создай новый
+
+---
+
+## 🌐 Настройка бесплатного домена DuckDNS
+
+### Шаг 1: Регистрация
+1. Зайди на [duckdns.org](https://duckdns.org)
+2. Войди через GitHub / Twitter / Google
+3. В разделе **domains** введи желаемое имя (например `osintforum`) и нажми **add domain**
+4. Скопируй **token** (длинная строка)
+
+### Шаг 2: Настройка на сервере
+Добавь в Railway **Variables**:
+```
+DUCKDNS_DOMAIN=osintforum
+DUCKDNS_TOKEN=твой_токен_с_duckdns
+BASE_URL=https://osintforum.duckdns.org
+```
+
+Или в `.env` локально (для теста):
+```
+DUCKDNS_DOMAIN=osintforum
+DUCKDNS_TOKEN=токен
+```
+
+### Шаг 3: Как это работает
+Сервер автоматически:
+- Обновляет DuckDNS A-запись каждые 5 минут
+- Подставляет твой DuckDNS-адрес как BASE_URL
+- При редеплое Railway IP может меняться — DuckDNS сам подхватит новый IP
+
+### Шаг 4: HTTPS
+DuckDNS поддерживает Let's Encrypt! После настройки сервер получит SSL-сертификат. Сайт будет доступен по `https://osintforum.duckdns.org`
+
+### Шаг 5: (Опционально) Свой домен
+Если захочешь купить настоящий домен (например `osintforum.ru` ~150 руб/год):
+1. Купи домен на reg.ru / nic.ru
+2. В настройках DNS добавь CNAME запись: `@` → `osint-forum-production.up.railway.app`
+3. В Railway Dashboard → Settings → Domains добавь свой домен
+4. Railway сам выдаст SSL-сертификат

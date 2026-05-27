@@ -113,6 +113,28 @@ SQLiteStore.prototype.touch = function(sid, session, cb) {
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// ── DuckDNS auto-updater ────────────────────────────────────────
+const DUCKDNS_DOMAIN = process.env.DUCKDNS_DOMAIN || '';
+const DUCKDNS_TOKEN  = process.env.DUCKDNS_TOKEN  || '';
+if (DUCKDNS_DOMAIN && DUCKDNS_TOKEN) {
+  const https = require('https');
+  function updateDuckDns() {
+    const url = `https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDNS_TOKEN}&ip=&verbose=true`;
+    https.get(url, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        console.log(`[DuckDNS] ${DUCKDNS_DOMAIN}.duckdns.org → ${data.trim()}`);
+      });
+    }).on('error', (err) => {
+      console.error('[DuckDNS] Update error:', err.message);
+    });
+  }
+  updateDuckDns();
+  setInterval(updateDuckDns, 5 * 60 * 1000);
+  console.log(`[DuckDNS] Auto-updater started for ${DUCKDNS_DOMAIN}.duckdns.org`);
+}
+
 const CONFIG = {
   sessionSecret : process.env.SESSION_SECRET || 'CHANGE_ME_SECRET_32chars_min',
 };
