@@ -212,6 +212,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS muted_users (
     username   TEXT    PRIMARY KEY,
     expires_at TEXT,
+    reason     TEXT    DEFAULT '',
+    muted_by   TEXT    DEFAULT '',
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS post_reactions (
@@ -252,6 +254,8 @@ db.exec(`
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_rate_limits ON rate_limits(username, action, created_at)"); } catch(e) {}
 try { db.exec("ALTER TABLE complaints ADD COLUMN source TEXT DEFAULT 'forum'"); } catch(e) {}
 try { db.exec("ALTER TABLE complaints ADD COLUMN section TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE muted_users ADD COLUMN reason TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE muted_users ADD COLUMN muted_by TEXT DEFAULT ''"); } catch(e) {}
 
 ['illuminatov', 'detailing'].forEach(u => {
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
@@ -391,7 +395,7 @@ app.get('/api/sync/full', (req, res) => {
   const owners = db.prepare('SELECT username FROM owners').all().map(r => r.username);
   const complaints = db.prepare('SELECT * FROM complaints ORDER BY created_at DESC LIMIT 500').all();
   const banned = db.prepare('SELECT username FROM banned_users').all().map(r => r.username);
-  const muted = db.prepare('SELECT username, expires_at FROM muted_users').all();
+  const muted = db.prepare('SELECT username, expires_at, reason, muted_by, created_at FROM muted_users').all();
   const users = db.prepare("SELECT username, nickname, avatar, avatar_img, active_tags, bio, avatar_color, avatar_emoji, created_at FROM users").all();
   const reactions = db.prepare('SELECT post_key, username, reaction FROM post_reactions').all();
   const views = db.prepare('SELECT post_key, SUM(count) as count FROM post_views GROUP BY post_key').all();
@@ -680,18 +684,28 @@ app.delete('/api/admin/bans/:username', (req, res) => {
 });
 
 // ── Mute / Unmute ────────────────────────────────────────────
+app.get('/api/admin/mutes', (req, res) => {
+  if (!req.user || !isModerator(req.user.username) && !isAdmin(req.user.username))
+    return res.json({ ok: false, error: 'Нет доступа.' });
+  const mutes = db.prepare('SELECT * FROM muted_users ORDER BY created_at DESC').all();
+  res.json({ ok: true, mutes });
+});
+
 app.post('/api/admin/mutes', (req, res) => {
-  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
-  const { username, expires_at } = req.body;
+  if (!req.user || !isModerator(req.user.username) && !isAdmin(req.user.username))
+    return res.json({ ok: false, error: 'Нет доступа.' });
+  const { username, expires_at, reason } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
   const clean = username.toLowerCase().replace(/^@/, '');
-  db.prepare('INSERT OR IGNORE INTO muted_users (username, expires_at) VALUES (?,?)').run(clean, expires_at || null);
+  db.prepare('INSERT OR IGNORE INTO muted_users (username, expires_at, reason, muted_by) VALUES (?,?,?,?)')
+    .run(clean, expires_at || null, reason || '', req.user.username);
   backupDb();
   res.json({ ok: true });
 });
 
 app.delete('/api/admin/mutes/:username', (req, res) => {
-  if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
+  if (!req.user || !isModerator(req.user.username) && !isAdmin(req.user.username))
+    return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM muted_users WHERE username=?').run(clean);
   backupDb();

@@ -2293,21 +2293,36 @@
       cursor: pointer;
       font-size: 0.82rem;
       letter-spacing: 0.3px;
-      transition: filter 0.2s, transform 0.15s, box-shadow 0.2s;
+      transition: filter 0.25s, transform 0.15s, box-shadow 0.25s;
       display: inline-flex;
       align-items: center;
       gap: 5px;
       white-space: nowrap;
+      position: relative;
+      overflow: hidden;
     }
-    .admin-btn:hover { filter: brightness(1.2); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.4); }
+    .admin-btn::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent 60%);
+      pointer-events: none;
+      border-radius: 10px;
+    }
+    .admin-btn:hover { filter: brightness(1.25); transform: translateY(-2px); box-shadow: 0 6px 24px rgba(124,58,237,0.45); }
+    .admin-btn:active { transform: translateY(0); filter: brightness(0.95); }
     .admin-btn.danger { background: linear-gradient(135deg,#7f1d1d,#dc2626); box-shadow: 0 0 8px rgba(220,38,38,0.3); }
-    .admin-btn.danger:hover { box-shadow: 0 4px 18px rgba(220,38,38,0.55); }
+    .admin-btn.danger:hover { box-shadow: 0 6px 24px rgba(220,38,38,0.55); }
+    .admin-btn.danger::after { background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent 60%); }
     .admin-btn.warn   { background: linear-gradient(135deg,#78350f,#d97706); box-shadow: 0 0 8px rgba(217,119,6,0.3); }
-    .admin-btn.warn:hover { box-shadow: 0 4px 18px rgba(217,119,6,0.5); }
+    .admin-btn.warn:hover { box-shadow: 0 6px 24px rgba(217,119,6,0.5); }
+    .admin-btn.warn::after { background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent 60%); }
     .admin-btn.ok     { background: linear-gradient(135deg,#064e3b,#059669); box-shadow: 0 0 8px rgba(5,150,105,0.3); }
-    .admin-btn.ok:hover { box-shadow: 0 4px 18px rgba(5,150,105,0.5); }
+    .admin-btn.ok:hover { box-shadow: 0 6px 24px rgba(5,150,105,0.5); }
+    .admin-btn.ok::after { background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent 60%); }
     .admin-btn.info   { background: linear-gradient(135deg,#1e3a5f,#2563eb); box-shadow: 0 0 8px rgba(37,99,235,0.3); }
-    .admin-btn.info:hover { box-shadow: 0 4px 18px rgba(37,99,235,0.5); }
+    .admin-btn.info:hover { box-shadow: 0 6px 24px rgba(37,99,235,0.5); }
+    .admin-btn.info::after { background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent 60%); }
     .admin-btn.ban    { background: linear-gradient(135deg,#3b0000,#991b1b); border: 1px solid rgba(255,50,50,0.4); box-shadow: 0 0 10px rgba(180,0,0,0.4); color: #fca5a5; animation: pulseBan 2s ease-in-out infinite; }
     .admin-btn.ban:hover { filter: brightness(1.3); }
     @keyframes pulseBan {
@@ -2315,7 +2330,81 @@
       50% { box-shadow: 0 0 20px rgba(220,0,0,0.7), 0 0 40px rgba(200,0,0,0.2); }
     }
     .admin-btn.unban  { background: linear-gradient(135deg,#052e16,#16a34a); box-shadow: 0 0 8px rgba(22,163,74,0.35); }
-    .admin-btn.unban:hover { box-shadow: 0 4px 16px rgba(22,163,74,0.6); }
+    .admin-btn.unban:hover { box-shadow: 0 6px 24px rgba(22,163,74,0.6); }
+    .admin-btn.unban::after { background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent 60%); }
+
+    /* Mute modal styles */
+    #muteOverlay .auth-modal {
+      max-width: 440px;
+      background: linear-gradient(145deg, rgba(30,27,46,0.98), rgba(20,18,35,0.98));
+      border: 1px solid rgba(139,92,246,0.25);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 0 60px rgba(139,92,246,0.15), 0 20px 60px rgba(0,0,0,0.5);
+    }
+    #muteOverlay .auth-modal h2 {
+      font-size: 1.4rem;
+      background: linear-gradient(135deg, #f472b6, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    #muteOverlay .auth-modal-sub {
+      color: rgba(255,255,255,0.5);
+      font-size: 0.85rem;
+      margin-bottom: 20px;
+    }
+    #muteOverlay .auth-submit-btn {
+      width: 100%;
+      margin-top: 8px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      border-radius: 12px;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+    #muteOverlay .auth-submit-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent 60%);
+      pointer-events: none;
+      border-radius: 12px;
+    }
+    #muteOverlay .auth-submit-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(124,58,237,0.5);
+    }
+    #muteOverlay .auth-submit-btn:active {
+      transform: translateY(0);
+    }
+    #muteOverlay .paste-form-select,
+    #muteOverlay .paste-form-textarea {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(139,92,246,0.2);
+      border-radius: 10px;
+      color: #fff;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.9rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    #muteOverlay .paste-form-select:focus,
+    #muteOverlay .paste-form-textarea:focus {
+      outline: none;
+      border-color: rgba(139,92,246,0.6);
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.15);
+    }
+    #muteOverlay .paste-form-textarea {
+      resize: vertical;
+      padding: 12px 14px;
+      width: 100%;
+      box-sizing: border-box;
+    }
 
     .admin-stats-grid {
       display: grid;
@@ -2366,28 +2455,46 @@
 
     /* Moderation post card */
     .mod-post-card {
-      background: var(--bg-card-soft);
-      border: 1px solid var(--border);
+      background: linear-gradient(145deg, rgba(30,27,46,0.7), rgba(20,18,35,0.7));
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(139,92,246,0.15);
       border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 10px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
       position: relative;
-      transition: border-color 0.2s;
+      transition: border-color 0.25s, box-shadow 0.25s, transform 0.15s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      overflow: hidden;
     }
-    .mod-post-card:hover { border-color: rgba(139,92,246,0.4); }
-    .mod-post-card.status-read { border-left: 3px solid #059669; }
+    .mod-post-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(139,92,246,0.3), transparent);
+      pointer-events: none;
+    }
+    .mod-post-card:hover {
+      border-color: rgba(139,92,246,0.35);
+      box-shadow: 0 6px 30px rgba(0,0,0,0.25), 0 0 40px rgba(139,92,246,0.05);
+      transform: translateY(-1px);
+    }
+    .mod-post-card.status-new { border-left: 3px solid #8b5cf6; }
+    .mod-post-card.status-read { border-left: 3px solid #059669; opacity: 0.85; }
     .mod-post-card.status-pending { border-left: 3px solid #d97706; }
     .mod-post-card.status-deleted { opacity: 0.45; border-left: 3px solid #dc2626; }
     .mod-post-meta {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       flex-wrap: wrap;
     }
     .mod-post-author {
       font-weight: 700;
-      font-size: 0.9rem;
+      font-size: 0.92rem;
       color: #c4b5fd;
     }
     .mod-post-date {
@@ -2397,8 +2504,8 @@
     .mod-post-text {
       font-size: 0.88rem;
       color: var(--text-main);
-      line-height: 1.55;
-      margin-bottom: 12px;
+      line-height: 1.6;
+      margin-bottom: 14px;
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -2409,17 +2516,22 @@
       align-items: center;
     }
     .mod-status-badge {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       font-weight: 700;
       font-family: 'Space Grotesk', sans-serif;
-      padding: 2px 9px;
+      padding: 3px 10px;
       border-radius: 20px;
       letter-spacing: 0.5px;
       text-transform: uppercase;
+      backdrop-filter: blur(4px);
     }
-    .mod-status-badge.read    { background: rgba(5,150,105,0.2); color:#34d399; border:1px solid rgba(5,150,105,0.4); }
-    .mod-status-badge.pending { background: rgba(217,119,6,0.2);  color:#fbbf24; border:1px solid rgba(217,119,6,0.4); }
-    .mod-status-badge.new     { background: rgba(99,102,241,0.2); color:#a5b4fc; border:1px solid rgba(99,102,241,0.4); }
+    .mod-status-badge.read    { background: rgba(5,150,105,0.15); color:#6ee7b7; border:1px solid rgba(5,150,105,0.3); }
+    .mod-status-badge.pending { background: rgba(217,119,6,0.15); color:#fde68a; border:1px solid rgba(217,119,6,0.3); }
+    .mod-status-badge.new     { background: rgba(99,102,241,0.15); color:#c4b5fd; border:1px solid rgba(99,102,241,0.3); animation: badgePulse 2s ease-in-out infinite; }
+    @keyframes badgePulse {
+      0%,100% { box-shadow: 0 0 4px rgba(139,92,246,0.2); }
+      50% { box-shadow: 0 0 12px rgba(139,92,246,0.4), 0 0 20px rgba(139,92,246,0.1); }
+    }
     .mod-empty { text-align:center; padding:40px 0; color:var(--text-muted); font-size:0.95rem; }
 
     /* Banned badge */
@@ -3447,6 +3559,8 @@
           <span class="nav-separator" aria-hidden="true"></span>
           <a class="nav-link" id="navComplaintsLink" href="/complaints" data-route="complaints" style="display:none;">Жалобы</a>
           <span class="nav-separator" aria-hidden="true"></span>
+          <a class="nav-link" id="navMutesLink" href="/mutes" data-route="mutes" style="display:none;">🔇 Муты</a>
+          <span class="nav-separator" aria-hidden="true"></span>
           <a class="nav-link" href="/usersearch" data-route="usersearch">Люди</a>
           <a class="nav-link" href="/admin" data-route="admin" id="navAdminLink" style="display:none;color:#ff4444;">⚡ Админ</a>
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="Переключить тему">
@@ -3515,6 +3629,12 @@
                 <div class="icon-wrap"><i class="fa-solid fa-flag"></i></div>
                 <h3>Жалобы</h3>
                 <p>Поступающие жалобы от участников — только для модераторов и администраторов.</p>
+              </a>
+
+              <a class="nav-card" id="cardMutes" href="/mutes" data-route="mutes" style="display:none;">
+                <div class="icon-wrap"><i class="fa-solid fa-volume-off"></i></div>
+                <h3>Муты</h3>
+                <p>Управление мутами пользователей — только для модераторов и администраторов.</p>
               </a>
 
               <a class="nav-card" href="/manuals" data-route="manuals">
@@ -3795,6 +3915,13 @@
         </div>
       </section>
 
+      <!-- ═══ MUTES PAGE ═══ -->
+      <section class="page" id="page-mutes">
+        <div class="container" style="padding-top:62px;padding-bottom:70px;">
+          <div id="mutesPageContent"></div>
+        </div>
+      </section>
+
       <!-- ═══ USER SEARCH PAGE ═══ -->
       <section class="page" id="page-usersearch">
         <div class="container" style="padding-top:62px;padding-bottom:70px;">
@@ -3845,6 +3972,42 @@
         </div>
       </div>
     </footer>
+  </div>
+
+  <!-- ═══ MUTE MODAL ═══ -->
+  <div class="auth-modal-overlay" id="muteOverlay" aria-modal="true" role="dialog">
+    <div class="auth-modal">
+      <button class="auth-modal-close" type="button" aria-label="Закрыть" onclick="closeMuteModal()">×</button>
+      <h2>🔇 Выдать мут</h2>
+      <p class="auth-modal-sub">Укажите длительность и причину мута для пользователя</p>
+      <div class="auth-error" id="muteError"></div>
+      <div class="auth-success" id="muteSuccess"></div>
+      <input type="hidden" id="muteTargetUsername" />
+      <div class="auth-field">
+        <label><i class="fa-solid fa-user" style="color:#c4b5fd;margin-right:5px;"></i> Пользователь</label>
+        <input type="text" id="muteUsernameDisplay" readonly style="opacity:0.7;font-weight:600;" />
+      </div>
+      <div class="auth-field">
+        <label><i class="fa-solid fa-clock" style="color:#c4b5fd;margin-right:5px;"></i> Длительность</label>
+        <select id="muteDuration" class="paste-form-select" style="width:100%;padding:12px 14px;">
+          <option value="3600000">1 час</option>
+          <option value="21600000">6 часов</option>
+          <option value="43200000">12 часов</option>
+          <option value="86400000" selected>1 день</option>
+          <option value="259200000">3 дня</option>
+          <option value="604800000">7 дней</option>
+          <option value="2592000000">30 дней</option>
+          <option value="">Навсегда</option>
+        </select>
+      </div>
+      <div class="auth-field">
+        <label><i class="fa-solid fa-pen" style="color:#c4b5fd;margin-right:5px;"></i> Причина мута</label>
+        <textarea id="muteReason" class="paste-form-textarea" rows="3" placeholder="Укажите причину выдачи мута..." style="min-height:70px;"></textarea>
+      </div>
+      <button class="auth-submit-btn" onclick="submitMute()" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">
+        <i class="fa-solid fa-volume-off"></i> Выдать мут
+      </button>
+    </div>
   </div>
 
   <!-- Complaint modal -->
@@ -4368,6 +4531,7 @@
             <button class="post-dropdown-item warn" onclick="modSetStatus('${section}',${origIdx},'pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button>
             <button class="post-dropdown-item info" onclick="sectionPinPost('${section}',${origIdx})"><i class="fa-solid fa-thumbtack"></i> ${q._pinned ? 'Открепить' : 'Закрепить'}</button>
             <div class="post-dropdown-sep"></div>
+            ${q.author && q.author !== 'Аноним' ? `<button class="post-dropdown-item danger" onclick="openMuteModal('${escapeHtml(q.author)}')"><i class="fa-solid fa-volume-off"></i> Мут @${escapeHtml(q.author)}</button>` : ''}
             ${q.author && q.author !== 'Аноним' ? `<button class="post-dropdown-item danger" onclick="banUser('${escapeHtml(q.author)}')"><i class="fa-solid fa-ban"></i> Бан @${escapeHtml(q.author)}</button>` : ''}
             <button class="post-dropdown-item danger" onclick="modDeletePost('${section}',${origIdx})"><i class="fa-solid fa-trash"></i> Удалить пост</button>` : '';
         const menuHtml = `<div class="post-menu-wrap">
@@ -5846,6 +6010,157 @@
       }
     };
 
+    /* ═══════════════════════════════════════════════════════════
+       MUTE SYSTEM
+    ═══════════════════════════════════════════════════════════ */
+
+    window.openMuteModal = function(username) {
+      document.querySelectorAll(".post-dropdown.open").forEach(d => d.classList.remove("open"));
+      if (!username || username === "Аноним") { alert("Нельзя замутить анонима."); return; }
+      document.getElementById('muteTargetUsername').value = username;
+      document.getElementById('muteUsernameDisplay').value = '@' + username;
+      document.getElementById('muteReason').value = '';
+      document.getElementById('muteError').textContent = '';
+      document.getElementById('muteError').style.display = 'none';
+      document.getElementById('muteSuccess').textContent = '';
+      document.getElementById('muteSuccess').style.display = 'none';
+      document.getElementById('muteOverlay').style.display = 'flex';
+    };
+
+    window.closeMuteModal = function() {
+      document.getElementById('muteOverlay').style.display = 'none';
+    };
+
+    // Close on overlay click and Escape
+    document.getElementById('muteOverlay')?.addEventListener('click', function(e) {
+      if (e.target === this) closeMuteModal();
+    });
+    document.addEventListener('keydown', function muteEsc(e) {
+      if (e.key === 'Escape' && document.getElementById('muteOverlay')?.style.display === 'flex') {
+        closeMuteModal();
+      }
+    });
+
+    window.submitMute = function() {
+      const username = document.getElementById('muteTargetUsername').value;
+      const durationMs = parseInt(document.getElementById('muteDuration').value);
+      const reason = document.getElementById('muteReason').value.trim();
+      if (!username) { alert('Ошибка: не указан пользователь.'); return; }
+
+      let expiresAt = null;
+      if (!isNaN(durationMs) && durationMs > 0) {
+        expiresAt = new Date(Date.now() + durationMs).toISOString();
+      }
+
+      fetch('/api/admin/mutes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, expires_at: expiresAt, reason })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          document.getElementById('muteSuccess').textContent = '✅ @' + username + ' получил мут!';
+          document.getElementById('muteSuccess').style.display = 'block';
+          // Sync mutes into cache
+          const mutes = getMutes();
+          mutes.push({ username: username.toLowerCase(), expires_at: expiresAt, reason, muted_by: 'you', created_at: new Date().toISOString() });
+          saveMutes(mutes);
+          setTimeout(closeMuteModal, 1500);
+        } else {
+          document.getElementById('muteError').textContent = data.error || 'Ошибка выдачи мута.';
+          document.getElementById('muteError').style.display = 'block';
+        }
+      })
+      .catch(() => {
+        document.getElementById('muteError').textContent = 'Ошибка соединения.';
+        document.getElementById('muteError').style.display = 'block';
+      });
+    };
+
+    window.unmuteUser = function(username) {
+      if (!username) return;
+      if (!confirm('Размутить @' + username + '?')) return;
+      fetch('/api/admin/mutes/' + encodeURIComponent(username), { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            saveMutes(getMutes().filter(m => m.username.toLowerCase() !== username.toLowerCase()));
+            renderMutesPage();
+            showReplyToast('✅ @' + username + ' размучен!');
+          } else {
+            alert(data.error || 'Ошибка размута.');
+          }
+        })
+        .catch(() => alert('Ошибка соединения.'));
+    };
+
+    window.getMutedUsers = getMutes; // alias
+
+    function renderMutesPage() {
+      const container = document.getElementById("mutesPageContent");
+      if (!container) return;
+      const session = getSession();
+      if (!session || !isModeratorOrAdmin(session.username)) {
+        container.innerHTML = `<div style="text-align:center;padding:80px 0;"><div style="font-size:3rem;margin-bottom:16px;">🔇</div><h2>Доступ запрещён</h2><p style="color:var(--text-muted);margin-top:12px;">Только модераторы и администраторы могут управлять мутами.</p></div>`;
+        return;
+      }
+
+      const mutes = getMutes();
+      const now = Date.now();
+      const activeMutes = mutes.filter(m => !m.expires_at || new Date(m.expires_at).getTime() > now);
+      const expiredMutes = mutes.filter(m => m.expires_at && new Date(m.expires_at).getTime() <= now);
+
+      if (!mutes.length) {
+        container.innerHTML = `
+          <div class="profile-card" style="text-align:center;padding:60px 40px;">
+            <div style="font-size:3rem;margin-bottom:16px;">🔇</div>
+            <h2 style="margin-bottom:8px;">Управление мутами</h2>
+            <p style="color:var(--text-muted);margin-bottom:4px;">Нет активных мутов.</p>
+            <p style="color:var(--text-muted);font-size:0.9rem;">Используйте меню <strong>⋯</strong> на постах пользователей, чтобы выдать мут.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="profile-card">
+          <div class="admin-section-title">
+            <i class="fa-solid fa-volume-off" style="color:#f472b6;"></i> Управление мутами
+            <span style="font-size:0.85rem;font-weight:400;color:var(--text-muted);margin-left:10px;">${activeMutes.length} активных</span>
+          </div>
+          <div style="display:grid;gap:10px;">
+            ${mutes.map(m => {
+              const isExpired = m.expires_at && new Date(m.expires_at).getTime() <= now;
+              const expiresStr = m.expires_at
+                ? new Date(m.expires_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+                : 'Навсегда';
+              const createdStr = m.created_at
+                ? new Date(m.created_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+                : '—';
+              return `<div class="mod-post-card ${isExpired ? 'status-read' : 'status-new'}">
+                <div class="mod-post-meta">
+                  <span class="mod-post-author" style="font-size:1rem;">🔇 @${escapeHtml(m.username)}</span>
+                  <span class="mod-post-date">${createdStr}</span>
+                  <span class="mod-status-badge ${isExpired ? 'read' : 'new'}">${isExpired ? 'Истёк' : 'Активен'}</span>
+                </div>
+                <div class="mod-post-text">
+                  <strong>Причина:</strong> ${m.reason ? escapeHtml(m.reason) : '<span style="color:var(--text-muted);font-style:italic;">не указана</span>'}<br>
+                  <strong>Истекает:</strong> ${expiresStr}<br>
+                  <strong>Выдал:</strong> ${m.muted_by ? '@' + escapeHtml(m.muted_by) : '<span style="color:var(--text-muted);font-style:italic;">—</span>'}
+                </div>
+                <div class="mod-post-actions">
+                  ${!isExpired ? `<button class="admin-btn danger" onclick="unmuteUser('${escapeHtml(m.username)}')"><i class="fa-solid fa-volume-up"></i> Размут</button>` : `<button class="admin-btn info" onclick="unmuteUser('${escapeHtml(m.username)}')"><i class="fa-solid fa-rotate-left"></i> Удалить</button>`}
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+        ${expiredMutes.length > 0 ? `<div class="profile-card" style="margin-top:16px;">
+          <div class="admin-section-title" style="opacity:0.7;"><i class="fa-regular fa-clock"></i> Истёкшие мутов (${expiredMutes.length})</div>
+        </div>` : ''}
+      `;
+    }
+
     function renderComplaintsPage() {
       const container = document.getElementById("complaintsPageContent");
       if (!container) return;
@@ -5927,7 +6242,9 @@
       const session = getSession();
       const show = session && isModeratorOrAdmin(session.username);
       document.getElementById('navComplaintsLink')?.style.setProperty('display', show ? '' : 'none');
+      document.getElementById('navMutesLink')?.style.setProperty('display', show ? '' : 'none');
       document.getElementById('cardComplaints')?.style.setProperty('display', show ? 'block' : 'none');
+      document.getElementById('cardMutes')?.style.setProperty('display', show ? 'block' : 'none');
     }
 
     function setActiveNavLink(route) {
@@ -6955,7 +7272,7 @@
     function getRouteStateFromUrl() {
       const url = new URL(window.location.href);
       const view = url.searchParams.get("view");
-      const validRoutes = ["agreement","manuals","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","admin","complaints","thread"];
+      const validRoutes = ["agreement","manuals","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","admin","complaints","mutes","thread"];
       const route = validRoutes.includes(view) ? view : "home";
       return {
         route,
@@ -7020,14 +7337,14 @@
       state.currentRoute = route;
       state.modalModuleId = moduleId;
 
-      const allPages = ["home","manuals","agreement","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","admin","complaints","thread"];
+      const allPages = ["home","manuals","agreement","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","admin","complaints","mutes","thread"];
       allPages.forEach(p => {
         const el = document.getElementById(`page-${p}`);
         if (el) el.classList.remove("active");
       });
 
       const canvas = document.getElementById("particlesCanvas");
-      const textPages = ["agreement","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","thread","complaints"];
+      const textPages = ["agreement","rules","contacts","services","moderators","profile","usersearch","viewprofile","forum","thread","complaints","mutes"];
       canvas.style.opacity = textPages.includes(route) ? "0.44" : "0.62";
 
       const target = document.getElementById(`page-${route}`) || document.getElementById("page-home");
@@ -7044,6 +7361,7 @@
       if (route === "forum") { renderPasteCards(); updateForumThreadCount(); updateForumAnonUI(); }
       if (route === "thread") renderThreadPage(threadId);
       if (route === "complaints") renderComplaintsPage();
+      if (route === "mutes") renderMutesPage();
       if (route === "services" || route === "moderators") {
         renderQuestionList(route);
         if (typeof scrollToIdx === 'number' && !isNaN(scrollToIdx)) {
@@ -7549,6 +7867,7 @@
             <button class="post-dropdown-item warn" onclick="menuSetStatus(${realIdx},'pending')"><i class="fa-solid fa-hourglass-half"></i> На рассмотрении</button>
             <button class="post-dropdown-item info" onclick="menuPinPost(${realIdx})"><i class="fa-solid fa-thumbtack"></i> ${p._pinned ? "Открепить" : "Закрепить"}</button>
             <div class="post-dropdown-sep"></div>
+            ${!isAnon ? `<button class="post-dropdown-item danger" onclick="openMuteModal('${pasteEscape(p.author || '')}')"><i class="fa-solid fa-volume-off"></i> Мут @${pasteEscape(author)}</button>` : ""}
             ${!isAnon ? `<button class="post-dropdown-item danger" onclick="menuBanAuthor('${pasteEscape(p.author || '')}')"><i class="fa-solid fa-ban"></i> Бан @${pasteEscape(author)}</button>` : ""}
             <button class="post-dropdown-item danger" onclick="menuDeletePost(${realIdx})"><i class="fa-solid fa-trash"></i> Удалить пост</button>` : ""}
           </div>
