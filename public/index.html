@@ -4195,8 +4195,13 @@
             </a>
             <a class="contact-card" id="contactTelegramCard" href="#" target="_blank" rel="noopener noreferrer">
               <div class="contact-icon"><i class="fa-brands fa-telegram"></i></div>
-              <h3>Telegram</h3>
+              <h3>Telegram (связь)</h3>
               <p>Официальный Telegram для быстрых вопросов.</p>
+            </a>
+            <a class="contact-card" id="contactTgkCard" href="#" target="_blank" rel="noopener noreferrer">
+              <div class="contact-icon"><i class="fa-solid fa-bullhorn"></i></div>
+              <h3>Telegram-канал (ТГК)</h3>
+              <p>Новости, обновления и анонсы форума.</p>
             </a>
             <a class="contact-card" id="contactSupportBotCard" href="#" target="_blank" rel="noopener noreferrer">
               <div class="contact-icon"><i class="fa-solid fa-robot"></i></div>
@@ -4462,27 +4467,32 @@
         forum: "https://example.com/forum",
         /* ← ЗДЕСЬ МЕНЯЕШЬ ССЫЛКУ НА DOXBIN */
         doxbin: "https://doxbin.com/",
-        mainTelegram: "https://t.me/slaytogod",
-        tgChannel: "https://t.me/t.me/OSINTforum_web",
-        supportBot: "https://t.me/OSINTforumsupp_bot",
-        email: "mailto:osintf0rum@proton.me"
+        mainTelegram: "https://t.me/C0ntactsOsintForum",
+        tgChannel: "https://t.me/TheOsintForum",
+        supportBot: "https://t.me/Supp0rtOsintForumBot",
+        email: "mailto:TheOsintForum@proton.me"
       },
 
       /*
         ← ЗДЕСЬ МЕНЯЕШЬ ССЫЛКУ
         Контакты: карточка "Почта"
       */
-      contactsMailLink: "mailto:osintf0rum@proton.me",
+      contactsMailLink: "mailto:TheOsintForum@proton.me",
       /*
         ← ЗДЕСЬ МЕНЯЕШЬ ССЫЛКУ
         Контакты: карточка "Telegram"
       */
-      contactsTelegramLink: "https://t.me/slaytogod",
+      contactsTelegramLink: "https://t.me/C0ntactsOsintForum",
+      /*
+        ← ЗДЕСЬ МЕНЯЕШЬ ССЫЛКУ
+        Контакты: карточка "Telegram-канал (ТГК)"
+      */
+      contactsTgkLink: "https://t.me/TheOsintForum",
       /*
         ← ЗДЕСЬ МЕНЯЕШЬ ССЫЛКУ
         Контакты: карточка "Бот поддержки"
       */
-      contactsSupportBotLink: "https://t.me/OSINTforumsupp_bot",
+      contactsSupportBotLink: "https://t.me/Supp0rtOsintForumBot",
 
       /* ← ИЗМЕНЯЙ ЗДЕСЬ: Текст соглашения */
       agreementText:
@@ -4853,6 +4863,7 @@
       // Ссылки карточек на странице "Контакты"
       setHref("contactMailCard", CONFIG.contactsMailLink);
       setHref("contactTelegramCard", CONFIG.contactsTelegramLink);
+      setHref("contactTgkCard", CONFIG.contactsTgkLink);
       setHref("contactSupportBotCard", CONFIG.contactsSupportBotLink);
     }
 
