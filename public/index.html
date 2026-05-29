@@ -5689,8 +5689,8 @@
         }
         appCache.session = meData.user || null;
 
-        // Fetch all data
-        const res = await fetch('/api/sync/full');
+        // Fetch all data (с cache-buster для Cloudflare)
+        const res = await fetch('/api/sync/full?_=' + Date.now());
         const data = await res.json();
         if (!data.ok) return false;
 
@@ -6094,6 +6094,12 @@
 
     async function checkServerAuth() {
       const loaded = await loadAllFromServer();
+      // Debug: проверим аватар текущего пользователя после синхронизации
+      const session = getSession();
+      if (session) {
+        const profile = getUserProfile(session.username);
+        console.log('AppCache profile for', session.username, ':', profile ? {avatarColor: profile.avatarColor, avatarEmoji: profile.avatarEmoji, avatarImg: profile.avatarImg ? 'has img' : 'none'} : 'NOT FOUND');
+      }
       if (appCache.banned) {
         const container = document.querySelector("#page-home .container") || document.querySelector(".container");
         if (container) {
@@ -6794,9 +6800,19 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(serverData),
       }).then(r => r.json()).then(resp => {
-        if (resp.ok !== false) syncFromServer();
-      }).catch(() => {
-        console.error('Ошибка сохранения профиля на сервере');
+        if (resp.ok !== false) {
+          // Проверяем, что сервер реально сохранил
+          fetch('/api/debug/profile').then(r=>r.json()).then(d => {
+            if (d.ok && d.user) {
+              console.log('Profile saved OK. server avatar_color:', d.user.avatar_color, 'avatar_emoji:', d.user.avatar_emoji, 'avatar_img:', d.user.avatar_img ? d.user.avatar_img.slice(0,50)+'...' : 'none');
+            }
+          }).catch(()=>{});
+          syncFromServer();
+        } else {
+          console.error('Server save failed:', resp.error);
+        }
+      }).catch(e => {
+        console.error('Ошибка сохранения профиля на сервере:', e);
       });
     }
 

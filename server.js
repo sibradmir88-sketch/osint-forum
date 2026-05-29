@@ -441,6 +441,10 @@ app.get('/api/sync/init', (req, res) => {
 
 // Full sync: returns EVERYTHING the frontend needs — no localStorage required
 app.get('/api/sync/full', (req, res) => {
+  // Запрещаем кеширование, чтобы Cloudflare не отдавал устаревшие данные
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const admins = db.prepare('SELECT username FROM admin_usernames').all().map(r => r.username);
   const moderators = db.prepare('SELECT username FROM moderators').all().map(r => r.username);
   const chiefModerators = db.prepare('SELECT username FROM chief_moderators').all().map(r => r.username);
@@ -666,6 +670,7 @@ app.get('/api/users/:username', (req, res) => {
 });
 
 app.patch('/api/users/me', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
   const { nickname, avatar, active_tags, bio, avatar_color, avatar_emoji, avatar_img } = req.body;
   const existing = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
@@ -683,6 +688,13 @@ app.patch('/api/users/me', (req, res) => {
     );
   backupDb();
   res.json({ ok: true });
+});
+
+// ── Debug: check user profile in DB ──────────────────────────
+app.get('/api/debug/profile', (req, res) => {
+  if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
+  res.json({ ok: true, user });
 });
 
 // ── Complaints CRUD ──────────────────────────────────────────
