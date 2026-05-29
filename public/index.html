@@ -6771,6 +6771,7 @@
       const users = getUsers();
       const key = username.toLowerCase();
       if (!users[key]) return;
+      // Оптимистичное обновление локального кеша (мгновенный отклик)
       users[key] = { ...users[key], ...profileData };
       appCache.users = users;
       const session = getSession();
@@ -6787,11 +6788,16 @@
       if (profileData.avatarColor !== undefined) serverData.avatar_color = profileData.avatarColor;
       if (profileData.avatarEmoji !== undefined) serverData.avatar_emoji = profileData.avatarEmoji;
       if (profileData.avatarImg !== undefined) serverData.avatar_img = profileData.avatarImg;
+      // Отправляем на сервер — после ответа пересинхронизируемся для гарантии
       fetch('/api/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(serverData),
-      }).catch(() => {});
+      }).then(r => r.json()).then(resp => {
+        if (resp.ok !== false) syncFromServer();
+      }).catch(() => {
+        console.error('Ошибка сохранения профиля на сервере');
+      });
     }
 
     /* ── Render My Profile Page ─────────────────────────────── */
@@ -7727,12 +7733,19 @@
       }
       appCache.users = users;
       appCache.session = { ...session, username: newUsername, nickname, avatar: nickname[0].toUpperCase() };
-      // Sync to server
+      // Sync to server — передаём все поля, чтобы случайно не стереть аватар и прочее
       fetch('/api/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname, active_tags: userData.activeTags }),
-      }).catch(() => {});
+        body: JSON.stringify({
+          nickname: nickname,
+          avatar: userData.avatar || '',
+          active_tags: userData.activeTags || ['BEGINNER'],
+          avatar_color: userData.avatarColor || AVATAR_COLORS[0],
+          avatar_emoji: userData.avatarEmoji || '',
+          avatar_img: userData.avatarImg || '',
+        }),
+      }).then(() => syncFromServer()).catch(() => {});
       showProfileMsg("identitySavedMsg", "✓ Сохранено!", false);
       updateNavForUser();
     }
@@ -7781,8 +7794,12 @@
 
     /* ── Avatar render helper (shared) ──────────────────────── */
     function renderAvatarHtml(profile, size = 52) {
+      if (!profile) {
+        const s = size;
+        return `<div class="user-card-avatar" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.4)}px;background:${AVATAR_COLORS[0] || '#7c3aed'};">?</div>`;
+      }
       const nickname = profile.nickname || profile.username || "?";
-      const bg = profile.avatarColor || AVATAR_COLORS[0];
+      const bg = profile.avatarColor || AVATAR_COLORS[0] || '#7c3aed';
       const style = `width:${size}px;height:${size}px;font-size:${Math.round(size*0.4)}px;`;
       if (profile.avatarImg) {
         return `<div class="user-card-avatar" style="${style}"><img src="${profile.avatarImg}" alt=""/></div>`;
@@ -7793,27 +7810,30 @@
     }
 
     function pasteAvatarHtml(username, isAnon, size) {
+      const s = size || 44;
+      const fontSize = Math.round(s * 0.42);
       if (isAnon || !username) {
-        const s = size || 44;
-        return `<div class="paste-avatar anon-avatar" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.4)}px;">👤</div>`;
+        return `<div class="paste-avatar anon-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;">👤</div>`;
       }
       const profile = getUserProfile(username);
-      const s = size || 44;
-      const fontSize = Math.round(s * 0.45);
       if (profile) {
+        // Изображение
         if (profile.avatarImg) {
           return `<div class="paste-avatar" style="width:${s}px;height:${s}px;padding:0;overflow:hidden;background:transparent;box-shadow:none;"><img src="${escapeHtml(profile.avatarImg)}" style="width:100%;height:100%;object-fit:cover;" alt=""/></div>`;
         }
-        const bg = profile.avatarColor || AVATAR_COLORS[0];
+        // Эмодзи
         if (profile.avatarEmoji) {
-          return `<div class="paste-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;background:${bg};">${profile.avatarEmoji}</div>`;
+          const bg = profile.avatarColor || AVATAR_COLORS[0] || '#7c3aed';
+          return `<div class="paste-avatar" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.48)}px;background:${bg};">${profile.avatarEmoji}</div>`;
         }
+        // Инициал с цветом
+        const bg = profile.avatarColor || AVATAR_COLORS[0] || '#7c3aed';
         const nick = profile.nickname || profile.username || username;
         return `<div class="paste-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;background:${bg};">${escapeHtml(nick[0].toUpperCase())}</div>`;
       }
-      // Fallback: no profile found
-      const initial = (username[0] || "?").toUpperCase();
-      return `<div class="paste-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;">${initial}</div>`;
+      // Профиль не найден — инициал с дефолтным градиентом
+      const ch = (typeof username === 'string' && username.length > 0) ? username[0].toUpperCase() : '?';
+      return `<div class="paste-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;">${escapeHtml(ch)}</div>`;
     }
 
     /* ── User search ─────────────────────────────────────────── */
