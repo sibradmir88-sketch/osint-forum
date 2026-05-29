@@ -795,16 +795,13 @@ app.post('/api/reactions', (req, res) => {
 app.post('/api/views', (req, res) => {
   const { post_key } = req.body;
   if (!post_key) return res.json({ ok: false, error: 'Неверные параметры.' });
-  const username = req.user?.username || 'anon';
-  const existing = db.prepare('SELECT * FROM post_views WHERE post_key=? AND username=?')
-    .get(post_key, username);
-  if (existing) {
-    db.prepare('UPDATE post_views SET count=count+1 WHERE post_key=? AND username=?')
-      .run(post_key, username);
-  } else {
-    db.prepare('INSERT INTO post_views (post_key, username, count) VALUES (?,?,1)')
-      .run(post_key, username);
-  }
+  // Для авторизованных — username (INSERT OR IGNORE гарантирует 1 просмотр на пользователя)
+  // Для анонимов — IP + User-Agent (стабильный идентификатор; обновление страницы не даёт +1)
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+  const ua = (req.headers['user-agent'] || '').slice(0, 64);
+  const viewerId = req.user?.username || ('anon_' + ip + '_' + ua);
+  db.prepare('INSERT OR IGNORE INTO post_views (post_key, username, count) VALUES (?,?,1)')
+    .run(post_key, viewerId);
   backupDb();
   res.json({ ok: true });
 });

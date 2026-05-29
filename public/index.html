@@ -4876,11 +4876,6 @@
         .replace(/'/g, "&#039;");
     }
 
-    function getInitial(name) {
-      const n = name.trim();
-      return n ? n[0].toUpperCase() : "?";
-    }
-
     function getSavedQuestions(section) {
       return appCache.sections[section] || [];
     }
@@ -4917,18 +4912,18 @@
         // Find original index for callbacks
         const origIdx = questions.indexOf(q);
         const authorName = escapeHtml(q.author ? (getDisplayName(q.author) || "Аноним") : "Аноним");
-        const initial = getInitial(q.author ? getDisplayName(q.author) : "А");
+        const isAnonQ = !q.author || q.anonymous;
         const statusDot = q._status === "pending" ? `<span class="paste-status-badge pending">⧗ На рассмотрении</span>` :
                           q._status === "read" ? `<span class="paste-status-badge read">✙ Прочитано</span>` : "";
         const pinnedBadge = q._pinned ? `<span class="paste-status-badge pinned">⬆ Закреплено</span>` : "";
         const repliesHtml = (q.replies || []).map(r => {
           const rDisplay = r.author ? getDisplayName(r.author) : "Аноним";
           const rName = escapeHtml(rDisplay);
-          const rInit = getInitial(rDisplay);
+          const rIsAnonQ = !r.author || r.anonymous;
           return `
             <div class="paste-reply-card">
               <div class="paste-card-header">
-                <div class="paste-avatar" style="width:30px;height:30px;font-size:0.82rem;">${rInit}</div>
+                ${pasteAvatarHtml(r.author, rIsAnonQ, 30)}
                 <div class="paste-meta">
                   <div class="paste-author-line">
                     <span class="paste-author-name">${rName}</span>
@@ -4963,7 +4958,7 @@
         return `
           <div class="paste-card${q._pinned ? ' has-pinned' : ''}" data-qi="${origIdx}" data-section="${section}">
             <div class="paste-card-header">
-              <div class="paste-avatar">${initial}</div>
+              ${pasteAvatarHtml(q.author, isAnonQ, 44)}
               <div class="paste-meta">
                 <div class="paste-author-line">
                   <span class="paste-author-name">${authorName}</span>
@@ -6399,7 +6394,7 @@
         </div>
         <div class="paste-card${post._pinned ? ' has-pinned' : ''}" id="thread-card-${threadId}" style="margin-top:18px;">
           <div class="paste-card-header">
-            <div class="paste-avatar">${pasteInitial(post.anonymous ? 'А' : post.author)}</div>
+            ${pasteAvatarHtml(post.author, post.anonymous, 44)}
             <div class="paste-meta">
               <div class="paste-author-line"><span class="paste-author-name">${escapeHtml(author)}</span><span class="paste-type-badge ${typeInfo.cls}">${typeInfo.emoji} ${typeInfo.label}</span></div>
               <div class="paste-date">${pasteFormatDate(post.date)}</div>
@@ -6422,7 +6417,7 @@
             const canDelReply = isAdm || rIsOwn;
             return `<div class="paste-reply-card">
               <div class="paste-card-header">
-                <div class="paste-avatar">${pasteInitial(r.anonymous ? 'А' : r.author)}</div>
+                ${pasteAvatarHtml(r.author, r.anonymous || !r.author, 30)}
                 <div class="paste-meta">
                   <div class="paste-author-line">
                     <span class="paste-author-name">${escapeHtml(rauthor)}</span>
@@ -7797,6 +7792,30 @@
       return `<div class="user-card-avatar" style="${style}background:${bg};">${escapeHtml(nickname[0].toUpperCase())}</div>`;
     }
 
+    function pasteAvatarHtml(username, isAnon, size) {
+      if (isAnon || !username) {
+        const s = size || 44;
+        return `<div class="paste-avatar anon-avatar" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.4)}px;">👤</div>`;
+      }
+      const profile = getUserProfile(username);
+      const s = size || 44;
+      const fontSize = Math.round(s * 0.45);
+      if (profile) {
+        if (profile.avatarImg) {
+          return `<div class="paste-avatar" style="width:${s}px;height:${s}px;padding:0;overflow:hidden;background:transparent;box-shadow:none;"><img src="${escapeHtml(profile.avatarImg)}" style="width:100%;height:100%;object-fit:cover;" alt=""/></div>`;
+        }
+        const bg = profile.avatarColor || AVATAR_COLORS[0];
+        if (profile.avatarEmoji) {
+          return `<div class="paste-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;background:${bg};">${profile.avatarEmoji}</div>`;
+        }
+        const nick = profile.nickname || profile.username || username;
+        return `<div class="paste-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;background:${bg};">${escapeHtml(nick[0].toUpperCase())}</div>`;
+      }
+      // Fallback: no profile found
+      const initial = (username[0] || "?").toUpperCase();
+      return `<div class="paste-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;">${initial}</div>`;
+    }
+
     /* ── User search ─────────────────────────────────────────── */
     function renderUserSearchPage() {
       const resultsEl = document.getElementById("userSearchResults");
@@ -8421,13 +8440,14 @@
         const allPastes = getPastes();
         const realIdx = allPastes.findIndex(a => a.date === p.date && a.topic === p.topic && a.author === p.author);
         const postKey = "post_" + realIdx;
+        // Stable view key based on _serverId — не меняется при сортировке/удалении
+        const viewKey = "pv_" + (p._serverId || realIdx);
         const typeInfo = PASTE_TYPES[p.type] || PASTE_TYPES.paste;
         const author = p.anonymous ? "Аноним" : (p.author || "Аноним");
         const isAnon = p.anonymous || !p.author;
         const displayName = isAnon ? "Аноним" : (getDisplayName(p.author) || "Аноним");
-        const initial = pasteInitial(isAnon ? "А" : displayName);
         const replyCount = p.replies?.length || 0;
-        const viewCount = views[postKey] || 0;
+        const viewCount = views[viewKey] || 0;
         const statusDot = p._status === "pending" ? `<span class="paste-status-badge pending">⧗ На рассмотрении</span>` :
                           p._status === "read" ? `<span class="paste-status-badge read">✙ Прочитано</span>` : "";
         const pinnedBadge = p._pinned ? `<span class="paste-status-badge pinned">⬆ Закреплено</span>` : "";
@@ -8436,10 +8456,9 @@
           const rAuthor = r.anonymous ? "Аноним" : (r.author || "Аноним");
           const rIsAnon = r.anonymous || !r.author;
           const rDisplayName = rIsAnon ? "Аноним" : (getDisplayName(r.author) || "Аноним");
-          const rInit = pasteInitial(rIsAnon ? "А" : rDisplayName);
           return `<div class="paste-reply-card">
             <div class="paste-card-header">
-              <div class="${rIsAnon ? "paste-avatar anon-avatar" : "paste-avatar"}" style="width:30px;height:30px;font-size:0.82rem;">${rInit}</div>
+              ${pasteAvatarHtml(r.author, rIsAnon, 30)}
               <div class="paste-meta">
                 <div class="paste-author-line">
                   <span class="paste-author-name">${pasteEscape(rDisplayName)}</span>
@@ -8456,7 +8475,7 @@
         const replyFormHtml = `<div class="paste-reply-form" id="pasteReplyForm-${realIdx}">
             <div class="anon-toggle-wrap" style="margin-bottom:10px;">
               <div style="display:flex;align-items:center;gap:8px;flex:1;">
-                <div class="forum-anon-avatar" id="replyAvatar-${realIdx}" style="width:28px;height:28px;font-size:0.8rem;">${session ? pasteInitial(replySessionName) : "👤"}</div>
+                ${session ? pasteAvatarHtml(session.username, false, 28) : `<div class="paste-avatar anon-avatar" style="width:28px;height:28px;font-size:0.8rem;">👤</div>`}
                 <span id="replyWho-${realIdx}" style="font-size:0.88rem;color:var(--text-muted);">${session ? pasteEscape(replySessionName) : "Аноним"}</span>
               </div>
               <label class="toggle-switch" for="prAnon-${realIdx}" style="margin-left:auto;">
@@ -8492,9 +8511,9 @@
           </div>
         </div>`;
 
-        return `<div class="paste-card${p._pinned ? ' has-pinned' : ''}" data-paste-idx="${realIdx}" data-viewed="0">
+        return `<div class="paste-card${p._pinned ? ' has-pinned' : ''}" data-paste-idx="${realIdx}" data-server-id="${p._serverId || ''}" data-viewed="0">
           <div class="paste-card-header">
-            <div class="${isAnon ? "paste-avatar anon-avatar" : "paste-avatar"}">${initial}</div>
+            ${pasteAvatarHtml(p.author, isAnon, 44)}
             <div class="paste-meta">
               <div class="paste-author-line">
                 <span class="paste-author-name">${pasteEscape(displayName)}</span>
@@ -8512,7 +8531,7 @@
           <div class="paste-body">${pasteEscape(p.text)}</div>
           <div class="forum-thread-stats">
             <span class="forum-thread-stat"><i class="fa-regular fa-comment"></i> ${replyCount} ${replyCount === 1 ? "ответ" : replyCount < 5 ? "ответа" : "ответов"}</span>
-            <span class="forum-thread-stat post-views" id="views-${postKey}"><i class="fa-regular fa-eye"></i> ${viewCount} просм.</span>
+            <span class="forum-thread-stat post-views" id="views-${viewKey}"><i class="fa-regular fa-eye"></i> ${viewCount} просм.</span>
             <span class="forum-thread-stat"><i class="fa-regular fa-clock"></i> ${pasteFormatDate(p.date)}</span>
           </div>
           ${buildReactionsBar(postKey, userId)}
@@ -8532,17 +8551,18 @@
       // Track views for visible posts using IntersectionObserver
       requestAnimationFrame(() => {
         container.querySelectorAll(".paste-card[data-viewed='0']").forEach(card => {
+          const serverId = card.getAttribute("data-server-id");
           const idx = card.getAttribute("data-paste-idx");
-          const postKey = "post_" + idx;
+          const viewKey = "pv_" + (serverId || idx);
           card.setAttribute("data-viewed", "1");
           if ("IntersectionObserver" in window) {
             const obs = new IntersectionObserver(entries => {
               entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                  trackView(postKey);
-                  const viewEl = document.getElementById("views-" + postKey);
+                  trackView(viewKey);
+                  const viewEl = document.getElementById("views-" + viewKey);
                   if (viewEl) {
-                    const v = getViews()[postKey] || 0;
+                    const v = getViews()[viewKey] || 0;
                     viewEl.innerHTML = `<i class="fa-regular fa-eye"></i> ${v} просм.`;
                     viewEl.classList.add("live");
                     setTimeout(() => viewEl.classList.remove("live"), 1200);
@@ -8553,7 +8573,7 @@
             }, { threshold: 0.3 });
             obs.observe(card);
           } else {
-            trackView(postKey);
+            trackView(viewKey);
           }
         });
       });
