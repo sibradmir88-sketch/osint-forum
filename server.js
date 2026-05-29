@@ -55,7 +55,7 @@ function backupDb() {
   try {
     const backupPath = '/tmp/forum-writebackup.db';
     try {
-      db.backup(backupPath, { progress: false });
+      db.backup(backupPath);
     } catch (e) {
       try { db.exec(`VACUUM INTO '${backupPath}'`); } catch(e2) { console.error('Backup VACUUM failed:', e2.message); return; }
     }
@@ -333,10 +333,12 @@ function hashPassword(pw) {
 
 function safeUser(u) {
   if (!u) return null;
-  return { id: u.id, username: u.username, nickname: u.nickname || u.username,
-           avatar: u.avatar, avatar_img: u.avatar_img, provider: u.provider,
-           active_tags: JSON.parse(u.active_tags || '["BEGINNER"]'),
-           theme: u.theme || 'dark',
+   return { id: u.id, username: u.username, nickname: u.nickname || u.username,
+            avatar: u.avatar, avatar_img: u.avatar_img,
+            avatar_color: u.avatar_color || '', avatar_emoji: u.avatar_emoji || '',
+            provider: u.provider,
+            active_tags: JSON.parse(u.active_tags || '["BEGINNER"]'),
+            theme: u.theme || 'dark',
            is_banned: isBanned(u.username),
            is_admin: isAdmin(u.username),
            is_moderator: isModerator(u.username),
@@ -344,8 +346,8 @@ function safeUser(u) {
 }
 
 app.set('trust proxy', 1);
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(session({
   secret           : CONFIG.sessionSecret,
   store            : new SQLiteStore(),
