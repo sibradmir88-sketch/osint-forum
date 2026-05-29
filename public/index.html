@@ -4916,14 +4916,15 @@
       listEl.innerHTML = sorted.map((q, qi) => {
         // Find original index for callbacks
         const origIdx = questions.indexOf(q);
-        const authorName = escapeHtml(q.author || "Аноним");
-        const initial = getInitial(q.author || "А");
+        const authorName = escapeHtml(q.author ? (getDisplayName(q.author) || "Аноним") : "Аноним");
+        const initial = getInitial(q.author ? getDisplayName(q.author) : "А");
         const statusDot = q._status === "pending" ? `<span class="paste-status-badge pending">⧗ На рассмотрении</span>` :
                           q._status === "read" ? `<span class="paste-status-badge read">✙ Прочитано</span>` : "";
         const pinnedBadge = q._pinned ? `<span class="paste-status-badge pinned">⬆ Закреплено</span>` : "";
         const repliesHtml = (q.replies || []).map(r => {
-          const rName = escapeHtml(r.author || "Аноним");
-          const rInit = getInitial(r.author || "А");
+          const rDisplay = r.author ? getDisplayName(r.author) : "Аноним";
+          const rName = escapeHtml(rDisplay);
+          const rInit = getInitial(rDisplay);
           return `
             <div class="paste-reply-card">
               <div class="paste-card-header">
@@ -5743,14 +5744,14 @@
           type: t.type || 'paste',
           topic: t.topic,
           text: t.text,
-          author: t.anonymous ? '' : (t.nickname || t.username || ''),
+          author: t.anonymous ? '' : (t.username || ''),
           anonymous: !!t.anonymous,
           date: t.created_at,
           _status: t.status || 'new',
           _pinned: !!t.pinned,
           replies: (t.replies || []).map(r => ({
             _serverId: r.id,
-            author: r.anonymous ? '' : (r.nickname || r.username || ''),
+            author: r.anonymous ? '' : (r.username || ''),
             anonymous: !!r.anonymous,
             text: r.text,
             date: r.created_at,
@@ -5764,7 +5765,7 @@
           if (!appCache.sections[section]) appCache.sections[section] = [];
           appCache.sections[section].push({
             _serverId: sp.id,
-            author: sp.anonymous ? '' : (sp.nickname || sp.username || ''),
+            author: sp.anonymous ? '' : (sp.username || ''),
             anonymous: !sp.author_id,
             text: sp.text,
             date: sp.created_at,
@@ -5772,7 +5773,7 @@
             _pinned: !!sp.pinned,
             replies: (sp.replies || []).map(r => ({
               _serverId: r.id,
-              author: r.anonymous ? '' : (r.nickname || r.username || ''),
+              author: r.anonymous ? '' : (r.username || ''),
               anonymous: !r.author_id,
               text: r.text,
               date: r.created_at,
@@ -6762,7 +6763,13 @@
 
     function getUserProfile(username) {
       const users = getUsers();
-      return users[username.toLowerCase()] || null;
+      return users[username?.toLowerCase()] || null;
+    }
+
+    function getDisplayName(username) {
+      if (!username) return "Аноним";
+      const profile = getUserProfile(username);
+      return profile?.nickname || username;
     }
 
     function saveUserProfile(username, profileData) {
@@ -8417,7 +8424,8 @@
         const typeInfo = PASTE_TYPES[p.type] || PASTE_TYPES.paste;
         const author = p.anonymous ? "Аноним" : (p.author || "Аноним");
         const isAnon = p.anonymous || !p.author;
-        const initial = pasteInitial(isAnon ? "А" : p.author);
+        const displayName = isAnon ? "Аноним" : (getDisplayName(p.author) || "Аноним");
+        const initial = pasteInitial(isAnon ? "А" : displayName);
         const replyCount = p.replies?.length || 0;
         const viewCount = views[postKey] || 0;
         const statusDot = p._status === "pending" ? `<span class="paste-status-badge pending">⧗ На рассмотрении</span>` :
@@ -8427,13 +8435,14 @@
         const repliesHtml = (p.replies || []).map(r => {
           const rAuthor = r.anonymous ? "Аноним" : (r.author || "Аноним");
           const rIsAnon = r.anonymous || !r.author;
-          const rInit = pasteInitial(rIsAnon ? "А" : r.author);
+          const rDisplayName = rIsAnon ? "Аноним" : (getDisplayName(r.author) || "Аноним");
+          const rInit = pasteInitial(rIsAnon ? "А" : rDisplayName);
           return `<div class="paste-reply-card">
             <div class="paste-card-header">
               <div class="${rIsAnon ? "paste-avatar anon-avatar" : "paste-avatar"}" style="width:30px;height:30px;font-size:0.82rem;">${rInit}</div>
               <div class="paste-meta">
                 <div class="paste-author-line">
-                  <span class="paste-author-name">${pasteEscape(rAuthor)}</span>
+                  <span class="paste-author-name">${pasteEscape(rDisplayName)}</span>
                   <span class="paste-date">${pasteFormatDate(r.date)}</span>
                 </div>
               </div>
@@ -8488,7 +8497,7 @@
             <div class="${isAnon ? "paste-avatar anon-avatar" : "paste-avatar"}">${initial}</div>
             <div class="paste-meta">
               <div class="paste-author-line">
-                <span class="paste-author-name">${pasteEscape(author)}</span>
+                <span class="paste-author-name">${pasteEscape(displayName)}</span>
                 <span class="paste-type-badge ${typeInfo.cls}">${typeInfo.emoji} ${typeInfo.label}</span>
                 ${statusDot}
               </div>
@@ -8604,7 +8613,7 @@
       
       // Если не вошёл в систему, то всегда анонимно
       const isAnon = anonymous || !session;
-      const author = isAnon ? "" : (session.nickname || session.username || "");
+      const author = isAnon ? "" : (session.username || "");
 
       const pastes = getPastes();
       if (!pastes[idx]) return;
@@ -8808,7 +8817,7 @@
         } catch(e) {}
 
         // Get author from session (no manual input field)
-        const author = anonymous ? "" : (session ? session.nickname || session.username : "");
+        const author = anonymous ? "" : (session ? session.username : "");
 
         const pastes = getPastes();
         const newPaste = { type, topic, author, anonymous, text, date: new Date().toISOString(), replies: [] };
