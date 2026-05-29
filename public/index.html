@@ -5706,7 +5706,7 @@
         // Build users lookup
         appCache.users = {};
         (data.users || []).forEach(u => {
-          appCache.users[u.username.toLowerCase()] = {
+          const profile = {
             username: u.username,
             nickname: u.nickname || u.username,
             avatar: u.avatar || '',
@@ -5717,6 +5717,12 @@
             activeTags: JSON.parse(u.active_tags || '["BEGINNER"]'),
             createdAt: u.created_at || '',
           };
+          appCache.users[u.username.toLowerCase()] = profile;
+          // Debug: если это текущий пользователь — покажем что пришло
+          const sess = getSession();
+          if (sess && u.username.toLowerCase() === sess.username.toLowerCase()) {
+            console.log('SYNC profile for', u.username, ':', { avatarColor: profile.avatarColor, avatarEmoji: profile.avatarEmoji, avatarImg: profile.avatarImg ? 'img('+profile.avatarImg.slice(0,40)+'...)' : 'none' });
+          }
         });
 
         // Build reactions map
@@ -7832,6 +7838,7 @@
         return `<div class="paste-avatar anon-avatar" style="width:${s}px;height:${s}px;font-size:${fontSize}px;">👤</div>`;
       }
       const profile = getUserProfile(username);
+      if (!profile) console.warn('pasteAvatarHtml: profile NOT FOUND for', username);
       if (profile) {
         // Изображение
         if (profile.avatarImg) {

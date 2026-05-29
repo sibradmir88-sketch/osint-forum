@@ -673,8 +673,10 @@ app.patch('/api/users/me', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
   const { nickname, avatar, active_tags, bio, avatar_color, avatar_emoji, avatar_img } = req.body;
+  console.log('PATCH /api/users/me for user', req.user.username, 'id=', req.user.id, 'body:', JSON.stringify({nickname, avatar_color, avatar_emoji, avatar_img: avatar_img ? avatar_img.slice(0,40)+'...' : undefined}));
   const existing = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
   if (!existing) return res.json({ ok: false, error: 'Пользователь не найден.' });
+  console.log('  existing: avatar_color=' + existing.avatar_color + ' avatar_emoji=' + existing.avatar_emoji + ' avatar_img=' + (existing.avatar_img ? existing.avatar_img.slice(0,40) : 'none'));
   db.prepare(`UPDATE users SET nickname=?, avatar=?, active_tags=?, bio=?, avatar_color=?, avatar_emoji=?, avatar_img=? WHERE id=?`)
     .run(
       nickname || existing.nickname,
@@ -686,6 +688,8 @@ app.patch('/api/users/me', (req, res) => {
       avatar_img !== undefined ? avatar_img : (existing.avatar_img || ''),
       req.user.id
     );
+  const after = db.prepare('SELECT avatar_color, avatar_emoji, avatar_img FROM users WHERE id=?').get(req.user.id);
+  console.log('  after update: avatar_color=' + after.avatar_color + ' avatar_emoji=' + after.avatar_emoji + ' avatar_img=' + (after.avatar_img ? after.avatar_img.slice(0,40) : 'none'));
   backupDb();
   res.json({ ok: true });
 });
