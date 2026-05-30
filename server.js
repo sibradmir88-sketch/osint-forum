@@ -298,7 +298,7 @@ db.prepare("DELETE FROM muted_users").run();
 console.log("RECOVERY: clearing all sessions");
 db.prepare("DELETE FROM sessions").run();
 
-// Delete spam messages posted by hacker
+// Delete ALL spam + hacker accounts + their content
 console.log("RECOVERY: deleting spam messages");
 const spamPattern = '%Ваш форум был взломан%';
 db.prepare("DELETE FROM threads WHERE text LIKE ?").run(spamPattern);
@@ -307,6 +307,47 @@ db.prepare("DELETE FROM replies WHERE text LIKE ?").run(spamPattern);
 db.prepare("DELETE FROM section_posts WHERE text LIKE ?").run(spamPattern);
 db.prepare("DELETE FROM section_replies WHERE text LIKE ?").run(spamPattern);
 db.prepare("DELETE FROM complaints WHERE details LIKE ? OR reason LIKE ?").run(spamPattern, spamPattern);
+
+// Delete ALL users with suspicious usernames (SQL injection attempts, @ prefixed, spaces, etc.)
+console.log("RECOVERY: purging hacker accounts");
+const suspiciousUsers = db.prepare(`
+  SELECT id, username FROM users WHERE
+    username LIKE '%@%' OR
+    username LIKE '%' || char(39) || '%' OR
+    username LIKE '%or%' OR
+    username LIKE '%-%' OR
+    username LIKE '% %' OR
+    username LIKE '%1%=%' OR
+    username LIKE '%admin%' OR
+    username LIKE '%hacker%' OR
+    username LIKE '%inject%' OR
+    username LIKE '%select%' OR
+    username LIKE '%union%' OR
+    username LIKE '%drop%' OR
+    username LIKE '%delete%' OR
+    username LIKE '%insert%' OR
+    username NOT GLOB '[a-zA-Z0-9_-]*'
+`).all();
+for (const u of suspiciousUsers) {
+  if (u.username === 'desacratio' || u.username === 'illuminatov' || u.username === 'detailing') continue;
+  console.log('  Purging:', u.username, '(id=' + u.id + ')');
+  db.prepare("DELETE FROM threads WHERE author_id=?").run(u.id);
+  db.prepare("DELETE FROM replies WHERE author_id=?").run(u.id);
+  db.prepare("DELETE FROM section_posts WHERE author_id=?").run(u.id);
+  db.prepare("DELETE FROM section_replies WHERE author_id=?").run(u.id);
+  db.prepare("DELETE FROM post_reactions WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM post_views WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM rate_limits WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM sessions WHERE sid IN (SELECT sid FROM sessions WHERE json_extract(data, '$.user.username') = ?)").run(u.username);
+  db.prepare("DELETE FROM admin_usernames WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM moderators WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM owners WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM chief_moderators WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM deputy_chief_moderators WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM banned_users WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM muted_users WHERE username=?").run(u.username);
+  db.prepare("DELETE FROM users WHERE id=?").run(u.id);
+}
 
 ['illuminatov', 'detailing'].forEach(u => {
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
@@ -371,6 +412,23 @@ function hashPassword(pw) {
 function sanitize(str) {
   if (typeof str !== 'string') return '';
   return str.replace(/<[^>]*>/g, '').trim();
+}
+
+// Strict username validation: ONLY latin letters, digits, underscore, hyphen (3-30 chars)
+// NO spaces, NO SQL special chars, NO @, NO unicode homoglyphs
+const USERNAME_RE = /^[a-zA-Z][a-zA-Z0-9_-]{2,29}$/;
+const SQL_INJECTION_PATTERNS = /'|"|;|--|\/\*|\*\/|xp_|UNION|SELECT|INSERT|DELETE|DROP|UPDATE|ALTER|CREATE|EXEC|OR\s+\d|OR\s+['"]/i;
+const HOMOGLYPH_BLOCK = /[а-яА-ЯёЁ]/; // block cyrillic in usernames
+
+function isValidUsername(str) {
+  if (typeof str !== 'string') return false;
+  return USERNAME_RE.test(str) && !SQL_INJECTION_PATTERNS.test(str) && !HOMOGLYPH_BLOCK.test(str);
+}
+
+// Strip everything that's not allowed from text fields
+function sanitizeStrict(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/[<>'"`;()]/g, '').trim().slice(0, 50000);
 }
 
 function safeUser(u) {
@@ -446,6 +504,8 @@ function loginUser(req, res, user) {
 app.post('/api/auth/register', authRateLimit, (req, res) => {
   const { username, email, password } = req.body;
   if (!username || username.length < 3) return res.json({ ok: false, error: 'Имя пользователя: минимум 3 символа.' });
+  // STRICT username validation: only latin letters, digits, underscore, hyphen
+  if (!isValidUsername(username)) return res.json({ ok: false, error: 'Имя пользователя: только латиница, цифры, _ и -. Без SQL-символов, пробелов, @ и кириллицы.' });
   if (!email || !/\S+@\S+\.\S+/.test(email)) return res.json({ ok: false, error: 'Введите корректный email.' });
   if (!password || password.length < 6) return res.json({ ok: false, error: 'Пароль: минимум 6 символов.' });
 
@@ -753,12 +813,16 @@ app.patch('/api/users/me', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
   let { nickname, avatar, active_tags, bio, avatar_color, avatar_emoji, avatar_img } = req.body;
-  // Sanitize text fields with length limits
-  if (nickname) nickname = sanitize(nickname).slice(0, 100);
-  if (bio !== undefined) bio = sanitize(bio).slice(0, 2000);
+  // Sanitize text fields with length limits + strip SQL dangerous chars
+  if (nickname) nickname = sanitizeStrict(nickname).slice(0, 100);
+  if (bio !== undefined) bio = sanitizeStrict(bio).slice(0, 2000);
   console.log('PATCH /api/users/me for user', req.user.username, 'id=', req.user.id, 'body:', JSON.stringify({nickname, avatar_color, avatar_emoji, avatar_img: avatar_img ? avatar_img.slice(0,40)+'...' : undefined}));
   const existing = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
   if (!existing) return res.json({ ok: false, error: 'Пользователь не найден.' });
+  // Validate nickname if changed (same rules as username)
+  if (nickname && nickname !== existing.nickname && !isValidUsername(nickname)) {
+    return res.json({ ok: false, error: 'Никнейм: только латиница, цифры, _ и -.' });
+  }
   console.log('  existing: avatar_color=' + existing.avatar_color + ' avatar_emoji=' + existing.avatar_emoji + ' avatar_img=' + (existing.avatar_img ? existing.avatar_img.slice(0,40) : 'none'));
   db.prepare(`UPDATE users SET nickname=?, avatar=?, active_tags=?, bio=?, avatar_color=?, avatar_emoji=?, avatar_img=? WHERE id=?`)
     .run(
