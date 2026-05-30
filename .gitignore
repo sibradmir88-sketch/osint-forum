@@ -6,3 +6,9 @@ forum.db-wal
 backup-db.sh
 restore-db.sh
 npm-debug.log*
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example

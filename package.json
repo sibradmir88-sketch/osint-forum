@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "keywords": [],
   "author": "",
@@ -17,5 +19,8 @@
     "express": "^4.22.1",
     "express-session": "^1.18.0",
     "nodemailer": "^8.0.7"
+  },
+  "devDependencies": {
+    "wrangler": "^4.95.0"
   }
 }
