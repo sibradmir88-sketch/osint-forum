@@ -449,6 +449,57 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// ── SQL Injection WAF: block requests with SQL patterns ──────────
+const SQLI_PATTERNS = [
+  /'\s*OR\s*['\d]/i,         // ' OR '1'='1
+  /'\s*OR\s*\d+\s*=\s*\d/i,  // ' OR 1=1
+  /'\s*AND\s*\d+\s*=\s*\d/i, // ' AND 1=1
+  /UNION\s+SELECT/i,          // UNION SELECT
+  /UNION\s+ALL\s+SELECT/i,    // UNION ALL SELECT
+  /;\s*DROP\s+TABLE/i,        // ; DROP TABLE
+  /;\s*DELETE\s+FROM/i,       // ; DELETE FROM
+  /;\s*INSERT\s+INTO/i,       // ; INSERT INTO
+  /;\s*UPDATE\s+\w+/i,        // ; UPDATE users
+  /;\s*ALTER\s+TABLE/i,       // ; ALTER TABLE
+  /;\s*CREATE\s+TABLE/i,      // ; CREATE TABLE
+  /;\s*TRUNCATE\s+TABLE/i,    // ; TRUNCATE TABLE
+  /;\s*EXEC\s*\(/i,           // ; EXEC(
+  /;\s*xp_/i,                 // ; xp_cmdshell (MSSQL)
+  /WAITFOR\s+DELAY/i,         // Time-based blind
+  /BENCHMARK\s*\(/i,          // MySQL benchmark
+  /SLEEP\s*\(/i,              // MySQL/PostgreSQL sleep
+  /PG_SLEEP\s*\(/i,           // PostgreSQL sleep
+  /'\s*--/,                   // Comment out rest
+  /'\s*#/,                    // MySQL comment
+  /\/\*!\w+\*\//,             // MySQL conditional comment
+  /CHAR\s*\(\d+/i,            // CHAR() function
+  /CONVERT\s*\(/i,            // CONVERT() function
+  /CAST\s*\(/i,               // CAST() function
+  /LOAD_FILE\s*\(/i,          // LOAD_FILE
+  /INTO\s+(OUT|DUMP)FILE/i,   // INTO OUTFILE
+  /INFORMATION_SCHEMA/i,      // Schema access
+  /@@version/i,               // Version disclosure
+];
+
+function sqlWafMiddleware(req, res, next) {
+  // Check all string values in body, query, and params
+  const toCheck = [req.body, req.query, req.params];
+  for (const obj of toCheck) {
+    if (!obj || typeof obj !== 'object') continue;
+    const values = Object.values(obj).filter(v => typeof v === 'string');
+    for (const val of values) {
+      for (const pattern of SQLI_PATTERNS) {
+        if (pattern.test(val)) {
+          console.log('SQLI WAF BLOCKED:', req.method, req.path, 'IP:', req.ip, 'pattern:', pattern.toString().slice(0, 40));
+          return res.status(403).json({ ok: false, error: 'Запрос заблокирован системой безопасности.' });
+        }
+      }
+    }
+  }
+  next();
+}
+app.use(sqlWafMiddleware);
+
 // ── Rate limiting for auth (server-side, brute force protection) ─────
 function authRateLimit(req, res, next) {
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0';
