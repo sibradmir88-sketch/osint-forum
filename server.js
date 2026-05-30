@@ -544,9 +544,12 @@ app.get('/api/sync/full', (req, res) => {
 
 app.get('/api/threads', (req, res) => {
   const { sort = 'newest', search = '' } = req.query;
-  const orderMap = { newest: 't.created_at DESC', oldest: 't.created_at ASC', popular: 'reply_count DESC' };
-  const order = orderMap[sort] || orderMap.newest;
-  const like = `%${search}%`;
+  // Safe ORDER BY: use index-based whitelist (NOT string interpolation)
+  const sortIndexes = { newest: 0, oldest: 1, popular: 2 };
+  const sortOrders = ['t.created_at DESC', 't.created_at ASC', 'reply_count DESC'];
+  const order = sortOrders[sortIndexes[sort]] || sortOrders[0];
+  const cleanSearch = sanitize(search).slice(0, 200);
+  const like = `%${cleanSearch}%`;
   const rows = db.prepare(`
     SELECT t.*, u.username, u.nickname, u.avatar, u.avatar_img,
            (SELECT COUNT(*) FROM replies r WHERE r.thread_id=t.id) AS reply_count
@@ -566,8 +569,8 @@ app.get('/api/threads', (req, res) => {
 
 app.post('/api/threads', (req, res) => {
   const { type, topic, text, anonymous } = req.body;
-  const cleanTopic = sanitize(topic || '');
-  const cleanText = sanitize(text || '');
+  const cleanTopic = sanitize(topic || '').slice(0, 500);
+  const cleanText = sanitize(text || '').slice(0, 50000);
   if (!cleanTopic || !cleanText)
     return res.json({ ok: false, error: 'Заполните тему и текст.' });
   if (req.user && isMuted(req.user.username))
@@ -582,7 +585,7 @@ app.post('/api/threads', (req, res) => {
 
 app.post('/api/threads/:id/replies', (req, res) => {
   const { text, anonymous } = req.body;
-  const cleanText = sanitize(text || '');
+  const cleanText = sanitize(text || '').slice(0, 50000);
   if (!cleanText) return res.json({ ok: false, error: 'Пустой ответ.' });
   if (req.user && isMuted(req.user.username))
     return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
@@ -663,7 +666,7 @@ app.get('/api/sections/:section', (req, res) => {
 
 app.post('/api/sections/:section', (req, res) => {
   const { text } = req.body;
-  const cleanText = sanitize(text || '');
+  const cleanText = sanitize(text || '').slice(0, 50000);
   if (!cleanText) return res.json({ ok: false, error: 'Пустое сообщение.' });
   if (req.user && isMuted(req.user.username))
     return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
@@ -691,13 +694,13 @@ app.patch('/api/user/theme', (req, res) => {
 
 app.post('/api/sections/:section/:postId/replies', (req, res) => {
   const { text } = req.body;
-  const cleanText = sanitize(text || '');
+  const cleanText = sanitize(text || '').slice(0, 50000);
   if (!cleanText) return res.json({ ok: false, error: 'Пустой ответ.' });
   if (req.user && isMuted(req.user.username))
     return res.json({ ok: false, error: 'Вы не можете писать, пока находитесь в муте.' });
   db.prepare(
     `INSERT INTO section_replies (post_id, text, author_id) VALUES (?,?,?)`
-  ).run(req.params.postId, text.trim(), req.user?.id || null);
+  ).run(req.params.postId, cleanText, req.user?.id || null);
   backupDb();
   res.json({ ok: true });
 });
@@ -734,9 +737,9 @@ app.patch('/api/users/me', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   if (!req.user) return res.json({ ok: false, error: 'Не авторизован.' });
   let { nickname, avatar, active_tags, bio, avatar_color, avatar_emoji, avatar_img } = req.body;
-  // Sanitize text fields
-  if (nickname) nickname = sanitize(nickname);
-  if (bio !== undefined) bio = sanitize(bio);
+  // Sanitize text fields with length limits
+  if (nickname) nickname = sanitize(nickname).slice(0, 100);
+  if (bio !== undefined) bio = sanitize(bio).slice(0, 2000);
   console.log('PATCH /api/users/me for user', req.user.username, 'id=', req.user.id, 'body:', JSON.stringify({nickname, avatar_color, avatar_emoji, avatar_img: avatar_img ? avatar_img.slice(0,40)+'...' : undefined}));
   const existing = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
   if (!existing) return res.json({ ok: false, error: 'Пользователь не найден.' });
@@ -805,8 +808,27 @@ app.delete('/api/complaints/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Admin action rate limit & audit ─────────────────────────────
+function adminRateLimit(req, res, next) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0';
+  const action = 'admin_' + req.method + '_' + req.path.split('/').slice(0,4).join('/');
+  const windowSec = 60;
+  const maxActions = 30;
+  const cutoff = new Date(Date.now() - windowSec * 1000).toISOString();
+  const count = db.prepare(
+    "SELECT COUNT(*) as c FROM rate_limits WHERE username=? AND action=? AND created_at>?"
+  ).get(ip, action, cutoff);
+  if (count.c >= maxActions) {
+    console.log('ADMIN RATE LIMIT:', req.user?.username, action, ip);
+    return res.json({ ok: false, error: 'Слишком много действий. Подождите минуту.' });
+  }
+  db.prepare("INSERT INTO rate_limits (username, action) VALUES (?,?)").run(ip, action);
+  console.log('ADMIN ACTION:', req.user?.username, req.method, req.path, 'IP:', ip);
+  next();
+}
+
 // ── Ban / Unban ──────────────────────────────────────────────
-app.post('/api/admin/bans', (req, res) => {
+app.post('/api/admin/bans', adminRateLimit, (req, res) => {
   if (!req.user || !isStaffWithBan(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const { username } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
@@ -816,7 +838,7 @@ app.post('/api/admin/bans', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/admin/bans/:username', (req, res) => {
+app.delete('/api/admin/bans/:username', adminRateLimit, (req, res) => {
   if (!req.user || !isStaffWithBan(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM banned_users WHERE username=?').run(clean);
@@ -832,7 +854,7 @@ app.get('/api/admin/mutes', (req, res) => {
   res.json({ ok: true, mutes });
 });
 
-app.post('/api/admin/mutes', (req, res) => {
+app.post('/api/admin/mutes', adminRateLimit, (req, res) => {
   if (!req.user || !isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const { username, expires_at, reason } = req.body;
@@ -844,7 +866,7 @@ app.post('/api/admin/mutes', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/admin/mutes/:username', (req, res) => {
+app.delete('/api/admin/mutes/:username', adminRateLimit, (req, res) => {
   if (!req.user || !isStaff(req.user.username))
     return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
@@ -891,7 +913,7 @@ app.get('/api/admin/admins', (req, res) => {
   res.json({ ok: true, admins: db.prepare('SELECT username FROM admin_usernames').all().map(r => r.username) });
 });
 
-app.post('/api/admin/admins', (req, res) => {
+app.post('/api/admin/admins', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const { username } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
@@ -907,7 +929,7 @@ app.post('/api/admin/admins', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/admin/admins/:username', (req, res) => {
+app.delete('/api/admin/admins/:username', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM admin_usernames WHERE username=?').run(clean);
@@ -934,7 +956,7 @@ app.get('/api/admin/db-export', (req, res) => {
   res.download(DB_PATH);
 });
 
-app.post('/api/admin/db-import', (req, res) => {
+app.post('/api/admin/db-import', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   res.json({ ok: false, error: 'Используй прямой SCP/SFTP для замены forum.db.' });
 });
@@ -945,7 +967,7 @@ app.get('/api/admin/moderators', (req, res) => {
   res.json({ ok: true, moderators: db.prepare('SELECT username FROM moderators').all().map(r => r.username) });
 });
 
-app.post('/api/admin/moderators', (req, res) => {
+app.post('/api/admin/moderators', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const { username } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
@@ -961,7 +983,7 @@ app.post('/api/admin/moderators', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/admin/moderators/:username', (req, res) => {
+app.delete('/api/admin/moderators/:username', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM moderators WHERE username=?').run(clean);
@@ -980,7 +1002,7 @@ app.get('/api/admin/owners', (req, res) => {
   res.json({ ok: true, owners: db.prepare('SELECT username FROM owners').all().map(r => r.username) });
 });
 
-app.post('/api/admin/owners', (req, res) => {
+app.post('/api/admin/owners', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const { username } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
@@ -996,7 +1018,7 @@ app.post('/api/admin/owners', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/admin/owners/:username', (req, res) => {
+app.delete('/api/admin/owners/:username', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM owners WHERE username=?').run(clean);
@@ -1015,7 +1037,7 @@ app.get('/api/admin/chief-moderators', (req, res) => {
   res.json({ ok: true, chiefModerators: db.prepare('SELECT username FROM chief_moderators').all().map(r => r.username) });
 });
 
-app.post('/api/admin/chief-moderators', (req, res) => {
+app.post('/api/admin/chief-moderators', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const { username } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
@@ -1031,7 +1053,7 @@ app.post('/api/admin/chief-moderators', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/admin/chief-moderators/:username', (req, res) => {
+app.delete('/api/admin/chief-moderators/:username', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM chief_moderators WHERE username=?').run(clean);
@@ -1050,7 +1072,7 @@ app.get('/api/admin/deputy-chief-moderators', (req, res) => {
   res.json({ ok: true, deputyChiefModerators: db.prepare('SELECT username FROM deputy_chief_moderators').all().map(r => r.username) });
 });
 
-app.post('/api/admin/deputy-chief-moderators', (req, res) => {
+app.post('/api/admin/deputy-chief-moderators', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const { username } = req.body;
   if (!username) return res.json({ ok: false, error: 'Укажите username.' });
@@ -1066,7 +1088,7 @@ app.post('/api/admin/deputy-chief-moderators', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/admin/deputy-chief-moderators/:username', (req, res) => {
+app.delete('/api/admin/deputy-chief-moderators/:username', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   const clean = req.params.username.toLowerCase();
   db.prepare('DELETE FROM deputy_chief_moderators WHERE username=?').run(clean);
@@ -1131,7 +1153,7 @@ app.post('/api/check-rate', (req, res) => {
 });
 
 // ── Manual backup trigger ─────────────────────────────────────
-app.post('/api/admin/backup', (req, res) => {
+app.post('/api/admin/backup', adminRateLimit, (req, res) => {
   if (!req.user || !isAdmin(req.user.username)) return res.json({ ok: false, error: 'Нет доступа.' });
   backupDb();
   res.json({ ok: true, message: 'Backup started to Google Drive' });
