@@ -287,19 +287,29 @@ try { db.exec("ALTER TABLE complaints ADD COLUMN section TEXT DEFAULT ''"); } ca
 try { db.exec("ALTER TABLE muted_users ADD COLUMN reason TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE muted_users ADD COLUMN muted_by TEXT DEFAULT ''"); } catch(e) {}
 
+// ── Recovery: unban all + restore admin access after hack ──
+console.log("=== RECOVERY MODE: clearing all bans and mutes ===");
+db.prepare("DELETE FROM banned_users").run();
+db.prepare("DELETE FROM muted_users").run();
+
 ['illuminatov', 'detailing'].forEach(u => {
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
 });
 
-// Guarantee desacratio exists as admin (restore from hack)
+// Create or update desacratio admin with known password
 const desacratioPwHash = crypto.createHash('sha256').update('328594123QAZ' + 'osint_salt_42').digest('hex');
-const existing = db.prepare("SELECT id FROM users WHERE username='desacratio'").get();
+const existing = db.prepare("SELECT id, password_hash FROM users WHERE username='desacratio'").get();
 if (!existing) {
+  console.log("RECOVERY: creating desacratio user");
   db.prepare(`INSERT INTO users (username, email, nickname, avatar, provider, password_hash, active_tags, avatar_color, theme)
               VALUES (?,?,?,?,?,?,?,?,?)`)
     .run('desacratio', 'admin@osint-forum.ru', 'desacratio', 'D', 'email', desacratioPwHash, '["ADMIN"]', 'linear-gradient(135deg,#667eea,#764ba2)', 'dark');
+} else {
+  console.log("RECOVERY: updating desacratio password to known value");
+  db.prepare("UPDATE users SET password_hash=? WHERE username='desacratio'").run(desacratioPwHash);
 }
 db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES ('desacratio')").run();
+console.log("=== RECOVERY DONE ===");
 
 function isAdmin(username) {
   if (!username) return false;
