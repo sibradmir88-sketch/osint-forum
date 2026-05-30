@@ -136,8 +136,10 @@ if (DUCKDNS_DOMAIN && DUCKDNS_TOKEN) {
 }
 
 const CONFIG = {
-  sessionSecret : process.env.SESSION_SECRET || 'CHANGE_ME_SECRET_32chars_min',
+  // NEVER use default — generate random if not set, to prevent session forgery
+  sessionSecret : process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
 };
+console.log("SESSION_SECRET from env:", !!process.env.SESSION_SECRET, "(random generated if false)");
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -291,6 +293,20 @@ try { db.exec("ALTER TABLE muted_users ADD COLUMN muted_by TEXT DEFAULT ''"); } 
 console.log("=== RECOVERY MODE: clearing all bans and mutes ===");
 db.prepare("DELETE FROM banned_users").run();
 db.prepare("DELETE FROM muted_users").run();
+
+// Clear ALL sessions (invalidates any forged session cookies)
+console.log("RECOVERY: clearing all sessions");
+db.prepare("DELETE FROM sessions").run();
+
+// Delete spam messages posted by hacker
+console.log("RECOVERY: deleting spam messages");
+const spamPattern = '%Ваш форум был взломан%';
+db.prepare("DELETE FROM threads WHERE text LIKE ?").run(spamPattern);
+db.prepare("DELETE FROM threads WHERE topic LIKE ?").run(spamPattern);
+db.prepare("DELETE FROM replies WHERE text LIKE ?").run(spamPattern);
+db.prepare("DELETE FROM section_posts WHERE text LIKE ?").run(spamPattern);
+db.prepare("DELETE FROM section_replies WHERE text LIKE ?").run(spamPattern);
+db.prepare("DELETE FROM complaints WHERE details LIKE ? OR reason LIKE ?").run(spamPattern, spamPattern);
 
 ['illuminatov', 'detailing'].forEach(u => {
   db.prepare("INSERT OR IGNORE INTO admin_usernames (username) VALUES (?)").run(u);
